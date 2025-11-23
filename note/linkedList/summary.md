@@ -1127,23 +1127,7 @@ void goodInsert(DNode* target, int value) {
 
 ---
 
-## 8. 附錄：GitHub 專案結構建議
 
-```
-.
-├── .gitignore
-├── README.md
-├── src
-│   ├── main.cpp              # 測試程式入口
-│   ├── linked_list.h         # 鏈結串列介面定義
-│   ├── linked_list.cpp       # 鏈結串列實作
-│   ├── doubly_linked_list.h  # 雙向鏈結串列介面定義
-│   └── circular_linked_list.h# 循環鏈結串列介面定義
-├── tests
-│   ├── test_singly.cpp       # 單向鏈結串列單元測試
-│   └── test_doubly.cpp       # 雙向鏈結串列單元測試
-└── CMakeLists.txt
-```
 
 ---
 
