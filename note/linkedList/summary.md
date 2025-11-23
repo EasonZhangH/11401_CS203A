@@ -1,36 +1,704 @@
-// 優點：
-// - O(1) 兩端插入刪除（類似鏈結串列）
-// - 近似 O(1) 隨機存取（類似陣列）
-// - 比 vector 更好的記憶體增長策略
+# 資料結構：鏈結串列完整筆記（Linked Lists）
 
-template<typename T>
-class SimplifiedDeque {
-private:
-    static const int CHUNK_SIZE = 16;
-    struct Chunk {
-        T data[CHUNK_SIZE];
+**作者：Manus AI**
+**來源：CS203A 資料結構 (Yuan Ze University, Chapter 4) 筆記整理與增補**
+
+---
+
+## 目錄（Table of Contents）
+
+1.  [列表（List）概念與抽象資料型別（ADT）](#1-列表list概念與抽象資料型別adt)
+2.  [高效率的插入與刪除操作](#2-高效率的插入與刪除操作)
+3.  [陣列的限制](#3-陣列的限制)
+4.  [鏈結串列的引入](#4-鏈結串列的引入)
+5.  [鏈結串列的變體](#5-鏈結串列的變體)
+6.  [陣列與鏈結串列的比較與實務建議](#6-陣列與鏈結串列的比較與實務建議)
+7.  [進階議題與優化技巧](#7-進階議題與優化技巧)
+8.  [附錄：GitHub 專案結構建議](#8-附錄github-專案結構建議)
+
+---
+
+## 1. 列表（List）概念與抽象資料型別（ADT）
+
+### 摘要
+本節介紹了「列表（List）」的基本概念，說明列表是一系列按照特定順序連接的項目。列表在日常生活與電腦科學中都極為常見，例如待辦事項清單、郵寄清單等。在電腦科學領域，列表是實作堆疊、佇列、集合、雜湊表、圖等資料結構的基礎。
+
+### 重點整理
+- **列表定義**：一系列依序排列、通常逐項列出的連接項目或名稱
+- **日常應用**：檢查清單、郵寄清單、待辦清單、願望清單
+- **電腦科學應用**：
+  - 作業系統中的記憶體管理
+  - 資料結構實作（堆疊、佇列、集合、雜湊表、圖）
+- **核心特性**：元素間具有順序性、可包含多個項目
+
+### PDF 原文重要定義
+
+> **List**: A number of connected items or names written or printed consecutively, typically one below the other.
+
+### 加深的內容
+
+**為什麼需要「列表」這個抽象概念？**
+
+在資料結構的學習中，「列表」是一個非常重要的**抽象資料型別（ADT）**。它提供了一個統一的介面來處理有序資料的集合，而不關心底層實作細節。這種抽象化的好處在於：
+
+1.  **關注點分離**：使用者只需知道列表「能做什麼」（操作介面），而不必了解「如何實作」（底層機制）
+2.  **靈活性**：同樣的列表介面可以用不同的方式實作（陣列、鏈結串列、跳躍表等），根據應用場景選擇最適合的實作
+3.  **可維護性**：當需要更換實作方式時，只要保持介面不變，使用該列表的程式碼無需修改
+
+**列表在作業系統中的實際應用**
+
+作業系統中廣泛使用列表來管理各種資源。例如：
+- **行程控制區塊（PCB）鏈**：作業系統維護一個所有行程的列表，每個行程有自己的狀態（執行中、就緒、等待）
+- **記憶體空閒區塊鏈**：使用鏈結串列追蹤記憶體中的空閒區塊，便於動態記憶體分配
+- **I/O 請求佇列**：裝置驅動程式使用列表管理待處理的 I/O 請求
+- **檔案系統 inode 鏈**：檔案系統使用列表結構組織檔案的元資料
+
+這些應用場景的共同特點是：元素數量動態變化、需要頻繁插入刪除、順序訪問為主。這些特性使得鏈結串列成為比陣列更適合的選擇。
+
+### 額外加深加廣的內容
+
+**1. 相關變體或延伸主題**
+
+列表的抽象概念可以延伸到多種變體：
+- **雙向列表（Doubly Linked List）**：每個元素同時記錄前後鄰居，支援雙向遍歷
+- **跳躍列表（Skip List）**：多層索引結構，提供 O(log n) 的搜尋效能
+- **展開列表（Unrolled Linked List）**：每個節點儲存多個元素，結合陣列與鏈結串列優點
+- **XOR 鏈結串列**：使用 XOR 運算壓縮儲存空間，每個節點只需一個指標欄位
+
+**2. 實務應用場景分析**
+
+在現代軟體開發中，列表的應用無所不在：
+
+**網頁瀏覽器歷史記錄**：使用雙向鏈結串列，支援前進/後退操作，每次訪問新頁面時插入新節點，並可能刪除過舊的記錄。
+
+**文字編輯器的 Undo/Redo**：
+```cpp
+// 文字編輯器的命令歷史管理（概念性程式碼）
+class CommandHistory {
+    struct Command {
+        string action;      // 動作類型
+        string data;        // 相關資料
+        Command* prev;      // 上一個命令
+        Command* next;      // 下一個命令
     };
-    std::vector<Chunk*> chunks;
-    int frontIndex, backIndex;
     
-public:
-    void push_back(const T& value) {
-        if (backIndex == CHUNK_SIZE) {
-            chunks.push_back(new Chunk());
-            backIndex = 0;
-        }
-        chunks.back()->data[backIndex++] = value;
+    Command* current;  // 目前位置
+    
+    void execute(Command* cmd) {
+        // 執行命令並加入歷史
+        // 刪除 current 之後的所有命令（分支歷史）
     }
     
-    T& operator[](int index) {
-        int chunkIndex = index / CHUNK_SIZE;
-        int localIndex = index % CHUNK_SIZE;
-        return chunks[chunkIndex]->data[localIndex];
+    void undo() { 
+        if (current) current = current->prev; 
+    }
+    
+    void redo() { 
+        if (current && current->next) current = current->next; 
     }
 };
 ```
 
-**2. 記憶體佔用的實際比較**
+**音樂播放器播放清單**：循環鏈結串列特別適合實作「重複播放」功能，最後一首歌的 next 指標指回第一首。
+
+**3. 潛在研究問題與開放議題**
+
+- **記憶體局部性問題**：鏈結串列的節點分散在記憶體中，導致快取命中率低。如何設計更 cache-friendly 的鏈結結構？
+- **無鎖並發列表**：在多執行緒環境下，如何設計無鎖（lock-free）的鏈結串列以提高並發效能？
+- **持久化資料結構**：如何設計支援版本控制的鏈結串列（每次修改保留舊版本）？
+
+### 理解檢核
+1.  **問題**：為什麼作業系統的行程管理更適合使用鏈結串列而非陣列？
+    **答案**：因為行程數量動態變化，使用鏈結串列可以在 O(1) 時間內插入或刪除行程，而陣列需要移動元素或預先分配大量空間。
+2.  **問題**：列表的「抽象」特性如何幫助程式設計？
+    **答案**：抽象使得使用者只需關注列表的操作介面（如 insert、delete、search），而不必了解底層實作。這允許在不改變使用程式碼的前提下，替換不同的實作方式（如從陣列改為鏈結串列）。
+3.  **問題**：請舉一個日常生活中「列表」概念的例子，並說明其特性。
+    **答案**：例如餐廳的候位名單。特性包括：(1) 有順序性（先到先候位）(2) 可動態增加（新顧客加入）(3) 可刪除（顧客取消或入座）(4) 需要查詢（查看排隊位置）。
+
+---
+
+## 2. 高效率的插入與刪除操作
+
+### 摘要
+本節提出資料結構設計的核心問題：如何實現高效率的插入與刪除操作？不同的資料結構有不同的時間複雜度：O(1)、O(n)、O(n log n)。這個問題引導我們思考陣列與鏈結串列在插入刪除操作上的效能差異。
+
+### 重點整理
+- **核心問題**：什麼是高效率的插入與刪除方式？
+- **時間複雜度等級**：
+  - O(1)：常數時間，最理想
+  - O(n)：線性時間，與元素數量成正比
+  - O(n log n)：對數線性時間，如某些排序演算法
+- **設計目標**：盡可能達到 O(1) 的插入刪除效能
+
+### 加深的內容
+
+**時間複雜度的實務意義**
+
+理解不同時間複雜度的實際影響對於選擇資料結構至關重要。假設我們有一個包含 1,000,000 筆資料的系統：
+
+- **O(1) 操作**：無論資料量多大，執行時間固定，約 1 微秒
+- **O(n) 操作**：需要遍歷所有元素，約 1 秒
+- **O(n²) 操作**：如簡單排序，可能需要 16 分鐘以上
+
+這就是為什麼在處理大量資料時，選擇正確的資料結構如此重要。一個看似簡單的操作（如插入元素），如果使用不當的資料結構，可能導致系統效能瓶頸。
+
+**為什麼陣列的插入刪除成本高？**
+
+陣列在記憶體中是連續儲存的，這帶來了以下問題：
+
+1.  **插入中間元素**：需要將插入位置後的所有元素向後移動一位
+2.  **刪除中間元素**：需要將刪除位置後的所有元素向前移動一位
+3.  **記憶體限制**：陣列大小固定，插入可能導致需要重新分配更大的記憶體空間並複製所有元素
+
+這些「移動元素」的操作在最壞情況下需要 O(n) 時間。如果應用場景需要頻繁插入刪除，陣列就不是最佳選擇。
+
+### 額外加深加廣的內容
+
+**1. 攤銷分析（Amortized Analysis）**
+
+有些資料結構雖然單次操作可能較慢，但長期平均下來效能很好。例如動態陣列（如 C++ 的 `std::vector`）：
+- 插入元素到尾端：通常 O(1)
+- 當容量不足時：需要重新分配記憶體並複製所有元素，這次操作是 O(n)
+- 但透過「每次擴容加倍容量」的策略，可以證明平均插入時間仍是 O(1)（攤銷複雜度）
+
+**2. 不同應用場景的選擇策略**
+
+| 應用場景 | 推薦資料結構 | 原因 |
+|:---------|:-------------|:-----|
+| 需要隨機存取 | 陣列 | O(1) 索引存取 |
+| 頻繁首尾插入刪除 | 雙向鏈結串列或 deque | O(1) 插入刪除 |
+| 需要排序且查詢頻繁 | 平衡二元搜尋樹 | O(log n) 插入刪除查詢 |
+| 鍵值對且需快速查詢 | 雜湊表 | 平均 O(1) 查詢 |
+| 需要維護優先順序 | 堆積（Heap） | O(log n) 插入刪除最值 |
+
+**3. 實務案例：資料庫索引設計**
+
+資料庫系統需要同時支援快速查詢和高效更新，通常使用 **B+ 樹**（B+ Tree）：
+- 查詢：O(log n)
+- 插入/刪除：O(log n)
+- 範圍查詢：透過葉節點鏈結，可以高效遍歷連續資料
+
+這是在「查詢效能」與「更新效能」之間取得平衡的經典範例。
+
+### 理解檢核
+1.  **問題**：為什麼在陣列中間插入元素需要 O(n) 時間？
+    **答案**：因為陣列元素在記憶體中連續儲存，插入新元素後，需要將插入位置之後的所有元素向後移動一位以騰出空間，最壞情況需要移動 n 個元素。
+2.  **問題**：什麼情況下 O(n) 的複雜度是可接受的？
+    **答案**：當資料量小（如 n < 100）、操作不頻繁、或沒有更優演算法可用時，O(n) 複雜度是可接受的。例如線性搜尋在小型陣列中就很實用。
+3.  **問題**：攤銷分析與最壞情況分析有何不同？
+    **答案**：最壞情況分析關注單次操作的最大成本，而攤銷分析關注一系列操作的平均成本。例如動態陣列的擴容操作單次是 O(n)，但攤銷後平均每次插入仍是 O(1)。
+
+---
+
+## 3. 陣列的限制
+
+### 摘要
+本節詳細說明了陣列在插入和刪除操作上的限制。陣列的連續記憶體配置特性導致在插入或刪除元素時，需要移動大量元素（costly shifts），造成效能瓶頸。這些限制促使我們尋找更適合動態操作的資料結構。
+
+### 重點整理
+- **陣列結構**：連續記憶體空間儲存，例如整數陣列 `[64, 34, 25, 12, 22, 11, 90, 8]`
+- **主要操作**：插入元素（Insert）、刪除元素（Delete）
+- **核心問題**：Costly shifts（昂貴的元素移動）
+- **改進方向**：尋找不需要移動元素的資料結構
+
+### PDF 原文程式碼與資料
+
+```
+Array: [64, 34, 25, 12, 22, 11, 90, 8]
+Integer Array
+```
+
+### 加深的內容
+
+**陣列插入操作的詳細分析**
+
+讓我們以程式碼來說明陣列插入操作的成本：
+
+```cpp
+#include <iostream>
+using namespace std;
+
+// 在陣列 position 位置插入元素 value
+// arr: 陣列指標, size: 目前元素數量, capacity: 陣列容量
+// 回傳: 插入後的新 size，若失敗則回傳 -1
+int insertArray(int* arr, int size, int capacity, int position, int value) {
+    // 檢查是否超出容量
+    if (size >= capacity) {
+        cout << "陣列已滿，無法插入" << endl;
+        return -1;
+    }
+    
+    // 檢查插入位置是否合法
+    if (position < 0 || position > size) {
+        cout << "插入位置不合法" << endl;
+        return -1;
+    }
+    
+    // 關鍵操作：將 position 之後的所有元素向後移動
+    // 時間複雜度：O(n - position)，最壞情況 O(n)
+    for (int i = size; i > position; i--) {
+        arr[i] = arr[i - 1];  // 每個元素都需要一次記憶體寫入操作
+    }
+    
+    // 在空出的位置插入新元素
+    arr[position] = value;
+    
+    return size + 1;  // 回傳新的 size
+}
+
+// 示範程式
+int main() {
+    const int CAPACITY = 10;
+    int arr[CAPACITY] = {64, 34, 25, 12, 22, 11, 90, 8};
+    int size = 8;
+    
+    cout << "原始陣列: ";
+    for (int i = 0; i < size; i++) cout << arr[i] << " ";
+    cout << endl;
+    
+    // 在位置 2 插入元素 99
+    size = insertArray(arr, size, CAPACITY, 2, 99);
+    
+    cout << "插入後陣列: ";
+    for (int i = 0; i < size; i++) cout << arr[i] << " ";
+    cout << endl;
+    // 輸出: 64 34 99 25 12 22 11 90 8
+    
+    return 0;
+}
+```
+
+**為什麼元素移動如此昂貴？**
+
+從硬體層面來看，每次元素移動涉及：
+1.  **讀取原始位置的資料**（記憶體讀取操作）
+2.  **寫入新位置**（記憶體寫入操作）
+3.  **可能觸發快取失效**（cache miss），導致需要從主記憶體載入資料
+
+當陣列很大時（如百萬個元素），在開頭插入一個元素就需要移動所有後續元素，這在高頻操作場景下會嚴重影響系統效能。
+
+**陣列刪除操作的成本**
+
+刪除操作的成本與插入類似：
+
+```cpp
+// 刪除陣列 position 位置的元素
+int deleteArray(int* arr, int size, int position) {
+    if (position < 0 || position >= size) {
+        cout << "刪除位置不合法" << endl;
+        return -1;
+    }
+    
+    // 將 position 之後的所有元素向前移動
+    // 時間複雜度：O(n - position)，最壞情況 O(n)
+    for (int i = position; i < size - 1; i++) {
+        arr[i] = arr[i + 1];
+    }
+    
+    return size - 1;  // 回傳新的 size
+}
+```
+
+### 額外加深加廣的內容
+
+**1. 陣列操作的時間複雜度完整分析**
+
+| 操作 | 最好情況 | 平均情況 | 最壞情況 | 說明 |
+|:-----|:---------|:---------|:---------|:-----|
+| 存取（Access） | O(1) | O(1) | O(1) | 直接計算記憶體位址 |
+| 搜尋（Search） | O(1) | O(n) | O(n) | 需要逐一檢查元素 |
+| 插入（Insert）尾端 | O(1) | O(1) | O(1) | 若有空間，直接加在最後 |
+| 插入（Insert）開頭 | O(n) | O(n) | O(n) | 需移動所有元素 |
+| 插入（Insert）中間 | O(1) | O(n) | O(n) | 平均需移動一半元素 |
+| 刪除（Delete） | O(1) | O(n) | O(n) | 同插入分析 |
+
+**2. 動態陣列（Dynamic Array）的改進**
+
+C++ 的 `std::vector` 和 Java 的 `ArrayList` 使用動態陣列技術，改善了陣列大小固定的問題：
+
+```cpp
+// std::vector 的簡化實作概念
+template <typename T>
+class SimpleVector {
+private:
+    T* data;           // 指向陣列的指標
+    size_t size;       // 目前元素數量
+    size_t capacity;   // 目前容量
+    
+    // 當容量不足時，重新分配更大的記憶體
+    void resize() {
+        size_t newCapacity = capacity * 2;  // 加倍容量
+        T* newData = new T[newCapacity];
+        
+        // 複製舊資料（O(n) 操作，但不常發生）
+        for (size_t i = 0; i < size; i++) {
+            newData[i] = data[i];
+        }
+        
+        delete[] data;  // 釋放舊記憶體
+        data = newData;
+        capacity = newCapacity;
+    }
+    
+public:
+    void push_back(const T& value) {
+        if (size >= capacity) {
+            resize();  // 容量不足時擴容
+        }
+        data[size++] = value;
+    }
+};
+```
+
+**動態陣列的優點**：
+- 自動管理容量
+- 插入尾端平均 O(1)（攤銷分析）
+- 保留陣列的隨機存取優勢
+
+**動態陣列的缺點**：
+- 擴容時的單次操作仍是 O(n)
+- 可能浪費記憶體（capacity > size）
+- 中間插入刪除仍然昂貴
+
+**3. 記憶體對齊與快取效能**
+
+陣列的連續記憶體配置雖然導致插入刪除昂貴，但在「讀取連續資料」時有巨大優勢：
+
+```cpp
+// 遍歷陣列（cache-friendly）
+int sumArray(int* arr, int n) {
+    int sum = 0;
+    for (int i = 0; i < n; i++) {
+        sum += arr[i];  // 連續存取，cache 命中率高
+    }
+    return sum;
+}
+```
+
+現代 CPU 的快取系統會一次載入一個「快取行」（Cache Line，通常 64 bytes）。陣列的連續儲存使得存取一個元素時，相鄰元素也被載入快取，後續存取非常快速。這就是為什麼在某些應用場景下（如數值計算、圖像處理），陣列仍是最佳選擇。
+
+---
+
+## 4. 鏈結串列的引入
+
+### 摘要
+本節透過形象化的比喻（火車車廂的連結器）引出鏈結串列的概念。鏈結串列由多個元素（節點）透過「連結器」（指標）串接而成，這種結構使得插入和刪除操作不需要移動其他元素，只需修改指標。
+
+### 重點整理
+- **核心概念**：Something should be linked（元素之間需要連結）
+- **火車比喻**：火車車廂透過連結器連接，類似節點透過指標連接
+- **結構轉變**：
+  - 陣列：連續記憶體區塊
+  - 鏈結串列：節點 + 連結器（指標）
+- **必要元素**：
+  - 資料欄位：儲存實際資料
+  - 指標欄位：儲存下一個節點的記憶體位址
+  - 頭節點（Head）：指向第一個節點的指標
+
+### 鏈結串列的結構與操作
+
+**節點結構**
+
+```c
+typedef struct Node {
+    int data;
+    struct Node* next;
+} Node;
+
+Node* createNode(int data) {
+    Node* newNode = (Node*)malloc(sizeof(Node));
+    if (newNode == NULL) {
+        perror("Memory allocation failed");
+        exit(EXIT_FAILURE);
+    }
+    newNode->data = data;
+    newNode->next = NULL;
+    return newNode;
+}
+```
+
+**遍歷操作**
+
+遍歷鏈結串列需要從頭節點開始，依序跟隨 `next` 指標直到遇到 `NULL`。
+
+```c
+void traverseList(Node* head) {
+    Node* current = head;
+    int index = 0;
+    while (current != NULL) {
+        printf("Node %d: Data=%d, Address=%p, Next=%p\n", 
+               index, current->data, (void*)current, (void*)current->next);
+        current = current->next;
+        index++;
+    }
+}
+
+int main() {
+    Node* head = createNode(10);
+    head->next = createNode(20);
+    head->next->next = createNode(30);
+    
+    printf("Traversing the linked list:\n");
+    traverseList(head);
+    
+    // Free memory
+    Node* current = head;
+    while (current != NULL) {
+        Node* temp = current;
+        current = current->next;
+        free(temp);
+    }
+    return 0;
+}
+```
+
+---
+
+## 5. 鏈結串列的變體
+
+### 摘要
+鏈結串列有多種變體，包括單向、雙向和循環鏈結串列，它們在結構和功能上各有側重，以滿足不同的應用需求。
+
+### 單向鏈結串列（Singly Linked List）
+- **結構**：每個節點只有一個 `next` 指標。
+- **特性**：只能單向遍歷。若要刪除某節點，必須先找到其**前驅節點**。
+
+### 雙向鏈結串列（Doubly Linked List）
+
+雙向鏈結串列相比單向鏈結串列，主要優勢在於：
+
+```cpp
+class DoublyLinkedList {
+private:
+    struct Node {
+        int data;
+        Node* prev;
+        Node* next;
+        Node(int val) : data(val), prev(nullptr), next(nullptr) {}
+    };
+    
+    Node* head;
+    Node* tail;
+    
+public:
+    DoublyLinkedList() : head(nullptr), tail(nullptr) {}
+    
+    // 優勢 1：O(1) 在已知節點前插入
+    void insertBefore(Node* target, int value) {
+        if (!target) return;
+        
+        Node* newNode = new Node(value);
+        newNode->next = target;
+        newNode->prev = target->prev;
+        
+        if (target->prev) {
+            target->prev->next = newNode;
+        } else {
+            head = newNode;  // target 是頭節點
+        }
+        
+        target->prev = newNode;
+    }
+    
+    // 優勢 2：O(1) 刪除已知節點（不需前驅）
+    void deleteNode(Node* target) {
+        if (!target) return;
+        
+        // 更新前驅的 next
+        if (target->prev) {
+            target->prev->next = target->next;
+        } else {
+            tail = target->prev;  // 刪除頭節點
+        }
+        
+        // 更新後繼的 prev
+        if (target->next) {
+            target->next->prev = target->prev;
+        } else {
+            tail = target->prev;  // 刪除尾節點
+        }
+        
+        delete target;
+    }
+    
+    // 優勢 3：雙向遍歷
+    void printForward() {
+        Node* curr = head;
+        while (curr) {
+            std::cout << curr->data << " <-> ";
+            curr = curr->next;
+        }
+        std::cout << "NULL\n";
+    }
+    
+    void printBackward() {
+        Node* curr = tail;
+        while (curr) {
+            std::cout << curr->data << " <-> ";
+            curr = curr->prev;
+        }
+        std::cout << "NULL\n";
+    }
+    
+    // 優勢 4：從兩端選擇較近端開始搜尋
+    Node* findOptimized(int position, int totalLength) {
+        if (position < totalLength / 2) {
+            // 從頭開始
+            Node* curr = head;
+            for (int i = 0; i < position; i++) {
+                curr = curr->next;
+            }
+            return curr;
+        } else {
+            // 從尾開始（更快）
+            Node* curr = tail;
+            for (int i = totalLength - 1; i > position; i--) {
+                curr = curr->prev;
+            }
+            return curr;
+        }
+    }
+};
+```
+
+### 循環鏈結串列（Circular Linked List）
+
+循環鏈結串列特別適合需要「循環」處理的場景：
+
+```cpp
+// 應用 1：輪詢排程（Round-Robin Scheduling）
+class RoundRobinScheduler {
+private:
+    struct Process {
+        int id;
+        int timeSlice;
+        Process* next;
+        Process(int i, int t) : id(i), timeSlice(t), next(nullptr) {}
+    };
+    
+    Process* current;
+    
+public:
+    void addProcess(int id, int timeSlice) {
+        Process* newProc = new Process(id, timeSlice);
+        
+        if (!current) {
+            current = newProc;
+            current->next = current;  // 指向自己
+        } else {
+            newProc->next = current->next;
+            current->next = newProc;
+        }
+    }
+    
+    void nextProcess() {
+        if (current) {
+            current = current->next;
+            std::cout << "執行程序: " << current->id << "\n";
+        }
+    }
+};
+```
+
+**應用 2：約瑟夫問題（Josephus Problem）**
+
+```cpp
+int josephus(int n, int k) {
+    // n 個人圍成圈，每次數到第 k 個人出列
+    struct Node {
+        int data;
+        Node* next;
+    };
+    
+    // 建立循環鏈結串列
+    Node* head = new Node{1, nullptr};
+    Node* prev = head;
+    
+    for (int i = 2; i <= n; i++) {
+        prev->next = new Node{i, nullptr};
+        prev = prev->next;
+    }
+    prev->next = head;  // 形成循環
+    
+    // 模擬出列過程
+    Node* curr = head;
+    while (curr->next != curr) {
+        // 數 k-1 個人
+        for (int i = 1; i < k; i++) {
+            prev = curr;
+            curr = curr->next;
+        }
+        
+        // 出列
+        std::cout << curr->data << " 出列\n";
+        prev->next = curr->next;
+        delete curr;
+        curr = prev->next;
+    }
+    
+    int survivor = curr->data;
+    delete curr;
+    return survivor;
+}
+```
+
+**應用 3：音樂播放器（循環播放）**
+
+```cpp
+class MusicPlayer {
+private:
+    struct Song {
+        std::string title;
+        Song* next;
+    };
+    
+    Song* current;
+    
+public:
+    void addSong(const std::string& title) {
+        Song* newSong = new Song{title, nullptr};
+        
+        if (!current) {
+            current = newSong;
+            current->next = current;
+        } else {
+            newSong->next = current->next;
+            current->next = newSong;
+        }
+    }
+    
+    void playNext() {
+        if (!current) return;
+        current = current->next;
+        std::cout << "正在播放: " << current->title << "\n";
+    }
+    
+    void playPrevious() {
+        // 循環鏈結串列需要遍歷找前一個
+        // 這是單向循環鏈結串列的缺點
+        Song* prev = current;
+        while (prev->next != current) {
+            prev = prev->next;
+        }
+        current = prev;
+        std::cout << "正在播放: " << current->title << "\n";
+    }
+};
+```
+
+---
+
+## 6. 陣列與鏈結串列的比較與實務建議
+
+### 變體的權衡取捨
+
+| 變體 | 遍歷方向 | 插入/刪除靈活性 | 記憶體開銷 | 適用場景 |
+|:-----|:---------|:----------------|:-----------|:---------|
+| 單向 | 單向 (從頭到尾) | 中等 (刪除需前驅) | 低 (1 個指標) | 簡單列表、頻繁尾端插入 |
+| 雙向 | 雙向 | 高 (O(1) 任意位置) | 中 (2 個指標) | 瀏覽器歷史、Undo/Redo |
+| 循環 | 循環 (無盡尾) | 高 (循環處理) | 低/中 (視單/雙向) | 輪詢排程、遊戲循環 |
+
+### 記憶體佔用的實際比較
 
 ```cpp
 #include <iostream>
@@ -75,7 +743,7 @@ void memoryComparison() {
 }
 ```
 
-**3. 不同操作的實際效能測試**
+### 不同操作的實際效能測試
 
 ```cpp
 #include <chrono>
@@ -169,12 +837,14 @@ public:
     }
 };
 
+/*
 int main() {
     PerformanceTester::testRandomAccess();
     PerformanceTester::testFrontInsertion();
     PerformanceTester::testSequentialTraversal();
     return 0;
 }
+*/
 
 // 典型輸出（實際結果依硬體而異）：
 // 隨機存取效能比較 (10000 次):
@@ -185,7 +855,7 @@ int main() {
 // 開頭插入效能比較 (10000 次):
 //   陣列: 1250 ms
 //   鏈結串列: 2 ms
-//   比例: 625:1 (陣列慢 625 倍！)
+//   比例: 625:1 (陣結慢 625 倍！)
 //
 // 順序遍歷效能比較 (大小 1000000):
 //   陣列: 800 μs
@@ -193,7 +863,7 @@ int main() {
 //   比例: 4.4:1 (鏈結串列慢 4.4 倍)
 ```
 
-**4. 實務建議總結**
+### 實務建議總結（決策樹實作）
 
 ```cpp
 // 決策樹實作
@@ -262,7 +932,87 @@ void demonstrateSelection() {
 }
 ```
 
-**5. 混合策略：根據資料量動態選擇**
+---
+
+## 7. 進階議題與優化技巧
+
+### 記憶體碎片化問題
+
+```cpp
+// 鏈結串列的記憶體碎片化
+void demonstrateFragmentation() {
+    std::list<int> lst;
+    
+    // 插入大量元素
+    for (int i = 0; i < 10000; i++) {
+        lst.push_back(i);
+    }
+    
+    // 刪除奇數位置的元素
+    auto it = lst.begin();
+    while (it != lst.end()) {
+        ++it;
+        if (it != lst.end()) {
+            it = lst.erase(it);  // 刪除，但記憶體可能未歸還系統
+        }
+    }
+    
+    // 問題：已刪除的節點記憶體可能仍被程式保留
+    // 造成記憶體碎片化
+    
+    // 解決方案：使用記憶體池或定期重建
+}
+```
+
+**記憶體池實作**
+
+```cpp
+template<typename T>
+class MemoryPool {
+private:
+    union Node {
+        T data;
+        Node* next;
+    };
+    
+    Node* freeList;
+    std::vector<Node*> blocks;
+    static const int BLOCK_SIZE = 1000;
+    
+public:
+    T* allocate() {
+        if (!freeList) {
+            Node* newBlock = new Node[BLOCK_SIZE];
+            blocks.push_back(newBlock);
+            
+            for (int i = 0; i < BLOCK_SIZE - 1; i++) {
+                newBlock[i].next = &newBlock[i + 1];
+            }
+            newBlock[BLOCK_SIZE - 1].next = nullptr;
+            freeList = newBlock;
+        }
+        
+        Node* node = freeList;
+        freeList = freeList->next;
+        return reinterpret_cast<T*>(node);
+    }
+    
+    void deallocate(T* ptr) {
+        Node* node = reinterpret_cast<Node*>(ptr);
+        node->next = freeList;
+        freeList = node;
+    }
+    
+    // 析構函數釋放所有區塊
+    ~MemoryPool() {
+        for (Node* block : blocks) {
+            delete[] block;
+        }
+    }
+};
+```
+
+### 混合策略：根據資料量動態選擇（Adaptive List）
 
 ```cpp
 template<typename T>
@@ -300,460 +1050,42 @@ public:
 };
 ```
 
-**6. 記憶體碎片化問題**
+### 陣列塊鏈結串列（Deque 概念）
 
 ```cpp
-// 鏈結串列的記憶體碎片化
-void demonstrateFragmentation() {
-    std::list<int> lst;
-    
-    // 插入大量元素
-    for (int i = 0; i < 10000; i++) {
-        lst.push_back(i);
-    }
-    
-    // 刪除奇數位置的元素
-    auto it = lst.begin();
-    while (it != lst.end()) {
-        ++it;
-        if (it != lst.end()) {
-            it = lst.erase(it);  // 刪除，但記憶體可能未歸還系統
-        }
-    }
-    
-    // 問題：已刪除的節點記憶體可能仍被程式保留
-    // 造成記憶體碎片化
-    
-    // 解決方案：使用記憶體池或定期重建
-}
+// 優點：
+// - O(1) 兩端插入刪除（類似鏈結串列）
+// - 近似 O(1) 隨機存取（類似陣列）
+// - 比 vector 更好的記憶體增長策略
 
-// 記憶體池實作
 template<typename T>
-class MemoryPool {
+class SimplifiedDeque {
 private:
-    union Node {
-        T data;
-        Node* next;
+    static const int CHUNK_SIZE = 16;
+    struct Chunk {
+        T data[CHUNK_SIZE];
     };
-    
-    Node* freeList;
-    std::vector<Node*> blocks;
-    static const int BLOCK_SIZE = 1000;
+    std::vector<Chunk*> chunks;
+    int frontIndex, backIndex;
     
 public:
-    T* allocate() {
-        if (!freeList) {
-            Node* newBlock = new Node[BLOCK_SIZE];
-            blocks.push_back(newBlock);
-            
-            for (int i = 0; i < BLOCK_SIZE - 1; i++) {
-                newBlock[i].next = &newBlock[i + 1];
-            }
-            newBlock[BLOCK_SIZE - 1].next = nullptr;
-            freeList = newBlock;
+    void push_back(const T& value) {
+        if (backIndex == CHUNK_SIZE) {
+            chunks.push_back(new Chunk());
+            backIndex = 0;
         }
-        
-        Node* node = freeList;
-        freeList = freeList->next;
-        return reinterpret_cast<T*>(node);
+        chunks.back()->data[backIndex++] = value;
     }
     
-    void deallocate(T* ptr) {
-        Node* node = reinterpret_cast<Node*>(ptr);
-        node->next = freeList;
-        freeList = node;
-    }
-    
-    ~MemoryPool() {
-        for (Node* block : blocks) {
-            delete[] block;
-        }
+    T& operator[](int index) {
+        int chunkIndex = index / CHUNK_SIZE;
+        int localIndex = index % CHUNK_SIZE;
+        return chunks[chunkIndex]->data[localIndex];
     }
 };
 ```
 
-### 參考來源
-[1] Yuan Ze University, "CS203A Data Structures - Linked Lists (Chapter 4)," Lecture Slides, pp. 47-49.  
-[2] U. Drepper, "What Every Programmer Should Know About Memory," Red Hat, Inc., 2007. [Online]. Available: https://people.freebsd.org/~lstewart/articles/cpumemory.pdf  
-[3] B. Stroustrup, "Why you should avoid Linked Lists," Going Native 2012 Conference Talk, Microsoft, 2012.  
-[4] C++ Reference, "std::deque," https://en.cppreference.com/w/cpp/container/deque
-
-### 理解檢核
-
-1. **問題**：為什麼在某些情況下，即使鏈結串列的插入刪除是 O(1)，實際效能仍可能不如陣列的 O(n) 操作？
-
-   **答案**：因為：(1) **快取效能**：陣列的連續記憶體配置使得 CPU 快取命中率高，即使理論上 O(n)，實際執行速度很快；鏈結串列的節點分散導致大量快取未命中，即使理論上 O(1)，實際可能很慢。(2) **常數因子**：鏈結串列需要動態記憶體分配、指標解參考等操作，常數因子大；陣列的操作更接近硬體，常數因子小。(3) **記憶體頻寬**：現代 CPU 的記憶體頻寬有限，鏈結串列的隨機存取模式會浪費頻寬。實務中，當 n 不大時（如 n < 10000），陣列常常更快。
-
-2. **問題**：在以下場景中，應該選擇陣列還是鏈結串列？(a) 實作瀏覽器的「上一頁/下一頁」功能；(b) 儲存遊戲中所有敵人的位置並頻繁更新；(c) 實作 LRU Cache。
-
-   **答案**：
-   - **(a) 瀏覽器歷史**：雙向鏈結串列。理由：需要雙向遍歷（上一頁/下一頁），插入新頁面時刪除未來的頁面（分支歷史），這些操作在鏈結串列中都是 O(1)。
-   - **(b) 遊戲敵人位置**：陣列（std::vector）。理由：需要頻繁遍歷所有敵人進行更新和渲染，陣列的快取友善特性使得遍歷非常快；敵人數量通常不會劇烈變化。
-   - **(c) LRU Cache**：雙向鏈結串列 + 雜湊表。理由：需要 O(1) 時間將存取的項目移到鏈結串列開頭（最近使用），並在滿時 O(1) 刪除尾端（最少使用），鏈結串列最適合。
-
-3. **問題**：為什麼現代 C++ 專家（如 Bjarne Stroustrup）常建議「預設使用 std::vector，除非有明確理由才用其他容器」？
-
-   **答案**：因為：(1) **硬體現實**：現代 CPU 的快取架構使得連續記憶體存取遠快於隨機存取，vector 的效能優勢在實務中非常明顯。(2) **簡單性**：vector 的介面簡單，bug 少，易於理解和維護。(3) **普遍性**：大多數應用的效能瓶頸不在資料結構的理論複雜度，而在快取和記憶體頻寬；vector 在這方面表現最好。(4) **插入刪除優化**：若需頻繁插入刪除，可考慮「標記刪除」而非真正移除元素，或使用 swap-and-pop 技巧。只有在「確實需要鏈結串列特性」（如雙向遍歷、O(1) 任意位置插入已知節點後）時才選擇 list。
-
----
-
-## Page 31-46 — 鏈結串列的變體
-
-### 摘要
-本部分介紹鏈結串列的三種主要變體：單向鏈結串列（Singly Linked List）、雙向鏈結串列（Doubly Linked List）、循環鏈結串列（Circular Linked List）。每種變體都有其特定的結構定義和適用場景。重點在於理解不同變體的權衡取捨（trade-offs）：遍歷方向、插入刪除靈活性、記憶體開銷等。同時提供了 C 和 C++ 的結構定義，以及實際遍歷範例程式碼。
-
-### 重點整理
-
-**三種鏈結串列變體**：
-
-1. **單向鏈結串列（Singly Linked List）**
-   - 每個節點只有一個 next 指標
-   - 只能單向遍歷（從頭到尾）
-   - 記憶體開銷最小
-   - 刪除節點需要知道前驅節點
-
-2. **雙向鏈結串列（Doubly Linked List）**
-   - 每個節點有 prev 和 next 兩個指標
-   - 可雙向遍歷（向前向後）
-   - 刪除節點更容易（可直接存取前驅）
-   - 記憶體開銷較大（多一個指標）
-
-3. **循環鏈結串列（Circular Linked List）**
-   - 最後一個節點的 next 指向第一個節點
-   - 沒有 NULL 終止符
-   - 適合循環處理的應用（如輪詢）
-   - 可以是單向或雙向
-
-### PDF 原文結構定義
-
-```c
-// 單向鏈結串列
-struct SNode {
-    int data;
-    struct SNode *next;
-};
-
-// 雙向鏈結串列
-struct DNode {
-    int data;
-    struct DNode *prev;
-    struct DNode *next;
-};
-
-// 循環鏈結串列
-struct CNode {
-    int data;
-    struct CNode *next;  // 最後節點指回頭
-};
-```
-
-```cpp
-// C++ 版本
-class SNode {
-public:
-    int data;
-    SNode* next;
-    SNode(int val) : data(val), next(nullptr) {}
-};
-
-class DNode {
-public:
-    int data;
-    DNode* prev;
-    DNode* next;
-    DNode(int val) : data(val), prev(nullptr), next(nullptr) {}
-};
-
-class CNode {
-public:
-    int data;
-    CNode* next;
-    CNode(int val) : data(val), next(nullptr) {}
-};
-```
-
-### PDF 原文：遍歷與觀察記憶體位址
-
-```c
-#include <stdio.h>
-#include <stdlib.h>
-
-typedef struct Node {
-    int data;
-    struct Node* next;
-} Node;
-
-Node* createNode(int value) {
-    Node* newNode = (Node*)malloc(sizeof(Node));
-    if (newNode == NULL) {
-        printf("Memory allocation failed.\n");
-        exit(1);
-    }
-    newNode->data = value;
-    newNode->next = NULL;
-    return newNode;
-}
-
-void traverseList(Node* head) {
-    Node* current = head;
-    int index = 0;
-    while (current != NULL) {
-        printf("Node %d: Value = %d, Address = %p, Next = %p\n",
-               index, current->data, (void*)current, (void*)current->next);
-        current = current->next;
-        index++;
-    }
-}
-
-int main() {
-    Node* head = createNode(10);
-    head->next = createNode(20);
-    head->next->next = createNode(30);
-    
-    printf("Traversing the linked list:\n");
-    traverseList(head);
-    
-    // Free memory
-    Node* current = head;
-    while (current != NULL) {
-        Node* temp = current;
-        current = current->next;
-        free(temp);
-    }
-    return 0;
-}
-```
-
-### <加深的內容>
-
-**雙向鏈結串列的優勢與實作**
-
-雙向鏈結串列相比單向鏈結串列，主要優勢在於：
-
-```cpp
-class DoublyLinkedList {
-private:
-    struct Node {
-        int data;
-        Node* prev;
-        Node* next;
-        Node(int val) : data(val), prev(nullptr), next(nullptr) {}
-    };
-    
-    Node* head;
-    Node* tail;
-    
-public:
-    DoublyLinkedList() : head(nullptr), tail(nullptr) {}
-    
-    // 優勢 1：O(1) 在已知節點前插入
-    void insertBefore(Node* target, int value) {
-        if (!target) return;
-        
-        Node* newNode = new Node(value);
-        newNode->next = target;
-        newNode->prev = target->prev;
-        
-        if (target->prev) {
-            target->prev->next = newNode;
-        } else {
-            head = newNode;  // target 是頭節點
-        }
-        
-        target->prev = newNode;
-    }
-    
-    // 優勢 2：O(1) 刪除已知節點（不需前驅）
-    void deleteNode(Node* target) {
-        if (!target) return;
-        
-        // 更新前驅的 next
-        if (target->prev) {
-            target->prev->next = target->next;
-        } else {
-            head = target->next;  // 刪除頭節點
-        }
-        
-        // 更新後繼的 prev
-        if (target->next) {
-            target->next->prev = target->prev;
-        } else {
-            tail = target->prev;  // 刪除尾節點
-        }
-        
-        delete target;
-    }
-    
-    // 優勢 3：雙向遍歷
-    void printForward() {
-        Node* curr = head;
-        while (curr) {
-            std::cout << curr->data << " <-> ";
-            curr = curr->next;
-        }
-        std::cout << "NULL\n";
-    }
-    
-    void printBackward() {
-        Node* curr = tail;
-        while (curr) {
-            std::cout << curr->data << " <-> ";
-            curr = curr->prev;
-        }
-        std::cout << "NULL\n";
-    }
-    
-    // 優勢 4：從兩端選擇較近端開始搜尋
-    Node* findOptimized(int position, int totalLength) {
-        if (position < totalLength / 2) {
-            // 從頭開始
-            Node* curr = head;
-            for (int i = 0; i < position; i++) {
-                curr = curr->next;
-            }
-            return curr;
-        } else {
-            // 從尾開始（更快）
-            Node* curr = tail;
-            for (int i = totalLength - 1; i > position; i--) {
-                curr = curr->prev;
-            }
-            return curr;
-        }
-    }
-};
-```
-
-**循環鏈結串列的應用場景**
-
-循環鏈結串列特別適合需要「循環」處理的場景：
-
-```cpp
-// 應用 1：輪詢排程（Round-Robin Scheduling）
-class RoundRobinScheduler {
-private:
-    struct Process {
-        int id;
-        int timeSlice;
-        Process* next;
-        Process(int i, int t) : id(i), timeSlice(t), next(nullptr) {}
-    };
-    
-    Process* current;
-    
-public:
-    void addProcess(int id, int timeSlice) {
-        Process* newProc = new Process(id, timeSlice);
-        
-        if (!current) {
-            current = newProc;
-            current->next = current;  // 指向自己
-        } else {
-            newProc->next = current->next;
-            current->next = newProc;
-        }
-    }
-    
-    void executeNext() {
-        if (!current) return;
-        
-        std::cout << "執行行程 " << current->id 
-                  << " (時間片: " << current->timeSlice << "ms)\n";
-        
-        current = current->next;  // 移到下一個，自動循環
-    }
-};
-
-// 應用 2：約瑟夫問題（Josephus Problem）
-int josephus(int n, int k) {
-    // n 個人圍成圈，每次數到第 k 個人出列
-    struct Node {
-        int data;
-        Node* next;
-    };
-    
-    // 建立循環鏈結串列
-    Node* head = new Node{1, nullptr};
-    Node* prev = head;
-    
-    for (int i = 2; i <= n; i++) {
-        prev->next = new Node{i, nullptr};
-        prev = prev->next;
-    }
-    prev->next = head;  // 形成循環
-    
-    // 模擬出列過程
-    Node* curr = head;
-    while (curr->next != curr) {
-        // 數 k-1 個人
-        for (int i = 1; i < k; i++) {
-            prev = curr;
-            curr = curr->next;
-        }
-        
-        // 出列
-        std::cout << curr->data << " 出列\n";
-        prev->next = curr->next;
-        delete curr;
-        curr = prev->next;
-    }
-    
-    int survivor = curr->data;
-    delete curr;
-    return survivor;
-}
-
-// 應用 3：音樂播放器（循環播放）
-class MusicPlayer {
-private:
-    struct Song {
-        std::string title;
-        Song* next;
-    };
-    
-    Song* current;
-    
-public:
-    void addSong(const std::string& title) {
-        Song* newSong = new Song{title, nullptr};
-        
-        if (!current) {
-            current = newSong;
-            current->next = current;
-        } else {
-            newSong->next = current->next;
-            current->next = newSong;
-        }
-    }
-    
-    void playNext() {
-        if (!current) return;
-        current = current->next;
-        std::cout << "正在播放: " << current->title << "\n";
-    }
-    
-    void playPrevious() {
-        // 循環鏈結串列需要遍歷找前一個
-        // 這是單向循環鏈結串列的缺點
-        Song* prev = current;
-        while (prev->next != current) {
-            prev = prev->next;
-        }
-        current = prev;
-        std::cout << "正在播放: " << current->title << "\n";
-    }
-};
-```
-
-**變體的權衡取捨**
-
-| 變體 | 遍歷方向 | 插入/刪除靈活性 | 記憶體開銷 | 適用場景 |
-|------|----------|-----------------|------------|----------|
-| 單向 | 單向 (從頭到尾) | 中等 (刪除需前驅) | 低 (1 個指標) | 簡單列表、頻繁尾端插入 |
-| 雙向 | 雙向 | 高 (O(1) 任意位置) | 中 (2 個指標) | 瀏覽器歷史、Undo/Redo |
-| 循環 | 循環 (無盡尾) | 高 (循環處理) | 低/中 (視單/雙向) | 輪詢排程、遊戲循環 |
-
-**常見錯誤與陷阱**
+### 常見錯誤與陷阱
 
 ```cpp
 // 錯誤 1：循環鏈結串列無限迴圈
@@ -793,1189 +1125,32 @@ void goodInsert(DNode* target, int value) {
 }
 ```
 
-**效能優化技巧**
+---
 
-```cpp
-// 優化 1：使用 sentinel node 簡化邊界處理
-class SentinelLinkedList {
-private:
-    DNode sentinel;  // 虛擬節點
-    DNode* head;
-    
-public:
-    SentinelLinkedList() : sentinel(0), head(&sentinel) {
-        sentinel.next = &sentinel;
-        sentinel.prev = &sentinel;
-    }
-    
-    void insertAfter(DNode* pos, int value) {
-        DNode* newNode = new DNode(value);
-        newNode->next = pos->next;
-        newNode->prev = pos;
-        pos->next->prev = newNode;
-        pos->next = newNode;
-    }
-};
+## 8. 附錄：GitHub 專案結構建議
 
-// 優化 2：雙向鏈結串列尾端指標
-class TailOptimizedList {
-private:
-    DNode* head = nullptr;
-    DNode* tail = nullptr;
-    
-public:
-    void pushBack(int value) {
-        DNode* newNode = new DNode(value);
-        if (!head) {
-            head = tail = newNode;
-        } else {
-            tail->next = newNode;
-            newNode->prev = tail;
-            tail = newNode;
-        }
-    }
-    
-    void popBack() {
-        if (!tail) return;
-        DNode* toDelete = tail;
-        tail = tail->prev;
-        if (tail) tail->next = nullptr;
-        else head = nullptr;
-        delete toDelete;
-    }
-};
 ```
-
-### 參考來源
-[1] Yuan Ze University, "CS203A Data Structures - Linked Lists (Chapter 4)," Lecture Slides, pp. 31-46.  
-[2] T. H. Cormen, C. E. Leiserson, R. L. Rivest, and C. Stein, *Introduction to Algorithms*, 3rd ed. MIT Press, 2009, Ch. 10 "Elementary Data Structures."  
-[3] GeeksforGeeks, "Circular Linked List," https://www.geeksforgeeks.org/circular-linked-list/  
-[4] C++ Reference, "std::list," https://en.cppreference.com/w/cpp/container/list
-
-### 理解檢核
-
-1. **問題**：為什麼雙向鏈結串列在刪除尾節點時比單向鏈結串列更有效率？
-
-   **答案**：單向鏈結串列刪除尾節點需從頭遍歷到倒數第二節點（O(n)），因為無法從尾回溯。雙向鏈結串列有 prev 指標，可直接從尾節點更新 prev->next = nullptr（O(1)）。如果維護 tail 指標，單向也可優化，但雙向更靈活。
-
-2. **問題**：循環鏈結串列在什麼情況下會導致無限迴圈？如何避免？
-
-   **答案**：在遍歷時若使用 `while (curr != nullptr)` 會無限迴圈，因為無 NULL 終止。避免方法：使用 do-while 循環並檢查是否回到頭節點（`do { ... } while (curr != head)`），或使用標記變數追蹤循環。
-
-3. **問題**：比較單向、雙向、循環鏈結串列的記憶體開銷，並說明選擇時的考量。
-
-   **答案**：單向：1 個指標，低開銷，適合記憶體受限環境。雙向：2 個指標，中開銷，適合需要雙向遍歷。循環：與單/雙向相同，但無 NULL，適合循環應用。考量：若需頻繁雙向操作選雙向；若記憶體緊迫選單向；若需循環如輪詢選循環。
+.
+├── .gitignore
+├── README.md
+├── src
+│   ├── main.cpp              # 測試程式入口
+│   ├── linked_list.h         # 鏈結串列介面定義
+│   ├── linked_list.cpp       # 鏈結串列實作
+│   ├── doubly_linked_list.h  # 雙向鏈結串列介面定義
+│   └── circular_linked_list.h# 循環鏈結串列介面定義
+├── tests
+│   ├── test_singly.cpp       # 單向鏈結串列單元測試
+│   └── test_doubly.cpp       # 雙向鏈結串列單元測試
+└── CMakeLists.txt
+```
 
 ---
 
-## Page 20-30 — 插入與刪除操作
-
-### 摘要
-本部分詳細說明鏈結串列的插入與刪除操作，包括在特定目標後插入、在開頭插入、在尾端插入、刪除特定目標、刪除開頭與尾端。強調遍歷列表找目標的必要性，以及處理邊界情況（如空列表、單節點）。PDF 提供步驟圖示，顯示指標變更順序。
-
-### 重點整理
-
-**插入操作**：
-- 一般插入：找目標後，更新指標 (O(n) 找目標 + O(1) 插入)
-- 開頭插入：直接更新 head (O(1))
-- 尾端插入：需遍歷到尾 (O(n))，或用 tail 指標優化為 O(1)
-
-**刪除操作**：
-- 一般刪除：找前驅，更新前驅->next (O(n))
-- 開頭刪除：更新 head (O(1))
-- 尾端刪除：找倒數第二，更新為 NULL (O(n))
-
-### PDF 原文：插入範例
-
-```c
-// 插入到目標後
-void insertAfter(Node* target, int value) {
-    if (target == NULL) return;
-    Node* newNode = createNode(value);
-    newNode->next = target->next;
-    target->next = newNode;
-}
-```
-
-### <加深的內容>
-
-**完整鏈結串列類別實作**
-
-```cpp
-class CompleteLinkedList {
-private:
-    struct Node {
-        int data;
-        Node* next;
-        Node(int val) : data(val), next(nullptr) {}
-    };
-    
-    Node* head = nullptr;
-    Node* tail = nullptr;
-    int count = 0;
-    
-public:
-    bool isEmpty() { return count == 0; }
-    int size() { return count; }
-    
-    // 插入開頭
-    void insertFront(int value) {
-        Node* newNode = new Node(value);
-        newNode->next = head;
-        head = newNode;
-        if (!tail) tail = newNode;
-        count++;
-    }
-    
-    // 插入尾端 (用 tail 優化)
-    void insertEnd(int value) {
-        Node* newNode = new Node(value);
-        if (!head) {
-            head = tail = newNode;
-        } else {
-            tail->next = newNode;
-            tail = newNode;
-        }
-        count++;
-    }
-    
-    // 插入位置
-    void insertAt(int position, int value) {
-        if (position < 0 || position > count) throw std::out_of_range("Position out of range");
-        if (position == 0) return insertFront(value);
-        if (position == count) return insertEnd(value);
-        
-        Node* prev = head;
-        for (int i = 0; i < position - 1; i++) {
-            prev = prev->next;
-        }
-        Node* newNode = new Node(value);
-        newNode->next = prev->next;
-        prev->next = newNode;
-        count++;
-    }
-    
-    // 刪除開頭
-    bool deleteFront() {
-        if (isEmpty()) return false;
-        Node* toDelete = head;
-        head = head->next;
-        delete toDelete;
-        count--;
-        if (count == 0) tail = nullptr;
-        return true;
-    }
-    
-    // 刪除尾端 (用 tail 優化)
-    bool deleteEnd() {
-        if (isEmpty()) return false;
-        if (count == 1) {
-            delete head;
-            head = tail = nullptr;
-            count = 0;
-            return true;
-        }
-        Node* prev = head;
-        while (prev->next != tail) prev = prev->next;
-        delete tail;
-        prev->next = nullptr;
-        tail = prev;
-        count--;
-        return true;
-    }
-    
-    // 刪除值
-    bool deleteValue(int value) {
-        if (isEmpty()) return false;
-        if (head->data == value) return deleteFront();
-        
-        Node* prev = head;
-        while (prev->next && prev->next->data != value) prev = prev->next;
-        if (!prev->next) return false;
-        
-        Node* toDelete = prev->next;
-        prev->next = toDelete->next;
-        if (toDelete == tail) tail = prev;
-        delete toDelete;
-        count--;
-        return true;
-    }
-    
-    // 刪除位置
-    void deleteAt(int position) {
-        if (position < 0 || position >= count) throw std::out_of_range("Position out of range");
-        if (position == 0) {
-            deleteFront();
-            return;
-        }
-        if (position == count - 1) {
-            deleteEnd();
-            return;
-        }
-        
-        Node* prev = head;
-        for (int i = 0; i < position - 1; i++) {
-            prev = prev->next;
-        }
-        Node* toDelete = prev->next;
-        prev->next = toDelete->next;
-        delete toDelete;
-        count--;
-    }
-    
-    ~CompleteLinkedList() {
-        while (!isEmpty()) deleteFront();
-    }
-};
-```
-
-**2. 尋找節點的各種策略**
-
-```cpp
-// 策略 1：按位置尋找 - O(n)
-Node* findByPosition(int position) {
-    if (position < 0 || position >= count) return nullptr;
-    
-    Node* current = head;
-    for (int i = 0; i < position; i++) {
-        current = current->next;
-    }
-    return current;
-}
-
-// 策略 2：按值尋找 - O(n)
-Node* findByValue(int value) {
-    Node* current = head;
-    while (current) {
-        if (current->data == value) {
-            return current;
-        }
-        current = current->next;
-    }
-    return nullptr;
-}
-
-// 策略 3：同時回傳前驅節點（用於刪除）- O(n)
-std::pair<Node*, Node*> findWithPrev(int value) {
-    Node* prev = nullptr;
-    Node* current = head;
-    
-    while (current) {
-        if (current->data == value) {
-            return {prev, current};
-        }
-        prev = current;
-        current = current->next;
-    }
-    return {nullptr, nullptr};
-}
-
-// 策略 4：使用 dummy node 簡化邏輯
-Node* findWithDummy(int value) {
-    Node dummy(0);
-    dummy.next = head;
-    Node* prev = &dummy;
-    
-    while (prev->next) {
-        if (prev->next->data == value) {
-            return prev;  // 回傳前驅
-        }
-        prev = prev->next;
-    }
-    return nullptr;
-}
-```
-
-**3. 插入刪除的時間複雜度分析總結**
-
-| 操作 | 無 tail 指標 | 有 tail 指標 | 雙向鏈結串列 | 說明 |
-|-----|------------|------------|------------|------|
-| 插入開頭 | O(1) | O(1) | O(1) | 直接操作 head |
-| 插入尾端 | O(n) | O(1) | O(1) | 需遍歷或直接用 tail |
-| 插入中間 | O(n) | O(n) | O(n) | 需先遍歷到位置 |
-| 刪除開頭 | O(1) | O(1) | O(1) | 直接操作 head |
-| 刪除尾端 | O(n) | O(n) | O(1) | 單向需找前驅，雙向直接操作 |
-| 刪除中間 | O(n) | O(n) | O(n) | 需遍歷找到節點 |
-| 搜尋 | O(n) | O(n) | O(n) | 都需要遍歷 |
-
-**4. 常見錯誤與陷阱**
-
-```cpp
-// 錯誤 1：記憶體洩漏
-void badDelete(Node*& head, int value) {
-    Node* current = head;
-    while (current && current->data != value) {
-        current = current->next;
-    }
-    if (current) {
-        head = current->next;  // 錯誤：沒有 delete
-    }
-}
-
-// 錯誤 2：野指標（Dangling Pointer）
-void createDanglingPointer() {
-    Node* node = new Node(10);
-    Node* ptr = node;
-    delete node;
-    // ptr 現在是野指標
-    cout << ptr->data;  // 未定義行為！
-}
-
-// 錯誤 3：重複刪除
-void doubleDelete(Node* node) {
-    delete node;
-    delete node;  // 錯誤：重複刪除
-}
-
-// 錯誤 4：忘記更新 tail
-void forgotToUpdateTail() {
-    // 刪除尾節點後忘記更新 tail
-    Node* prev = getPrevOfTail();
-    delete tail;
-    prev->next = nullptr;
-    // tail 現在指向已刪除的記憶體！
-}
-
-// 錯誤 5：環形連結
-void createCycle() {
-    Node* node1 = new Node(1);
-    Node* node2 = new Node(2);
-    node1->next = node2;
-    node2->next = node1;  // 形成環，遍歷會無限迴圈！
-}
-```
-
-**5. 單元測試範例**
-
-```cpp
-#include <cassert>
-#include <iostream>
-
-void testLinkedList() {
-    CompleteLinkedList list;
-    
-    // 測試空串列
-    assert(list.isEmpty() == true);
-    assert(list.size() == 0);
-    
-    // 測試插入
-    list.insertFront(10);
-    assert(list.size() == 1);
-    assert(list.isEmpty() == false);
-    
-    list.insertEnd(20);
-    list.insertEnd(30);
-    assert(list.size() == 3);
-    
-    // 測試插入位置
-    list.insertAt(1, 15);  // 10, 15, 20, 30
-    assert(list.size() == 4);
-    
-    // 測試刪除
-    assert(list.deleteFront() == true);  // 15, 20, 30
-    assert(list.size() == 3);
-    
-    assert(list.deleteEnd() == true);    // 15, 20
-    assert(list.size() == 2);
-    
-    assert(list.deleteValue(15) == true); // 20
-    assert(list.size() == 1);
-    
-    // 測試刪除不存在的值
-    assert(list.deleteValue(999) == false);
-    assert(list.size() == 1);
-    
-    // 測試清空
-    list.deleteFront();
-    assert(list.isEmpty() == true);
-    assert(list.size() == 0);
-    
-    // 測試邊界情況
-    try {
-        list.deleteAt(0);  // 空串列
-        assert(false);  // 不應到達這裡
-    } catch (const std::exception& e) {
-        // 預期的例外
-    }
-    
-    std::cout << "所有測試通過！" << std::endl;
-}
-```
-
-**6. 實務應用：LRU Cache**
-
-鏈結串列的一個經典應用是實作 LRU（Least Recently Used）快取：
-
-```cpp
-#include <unordered_map>
-
-class LRUCache {
-private:
-    struct Node {
-        int key, value;
-        Node *prev, *next;
-        Node(int k, int v) : key(k), value(v), prev(nullptr), next(nullptr) {}
-    };
-    
-    int capacity;
-    std::unordered_map<int, Node*> cache;  // key -> node
-    Node *head, *tail;  // dummy nodes
-    
-    void addToHead(Node* node) {
-        node->next = head->next;
-        node->prev = head;
-        head->next->prev = node;
-        head->next = node;
-    }
-    
-    void removeNode(Node* node) {
-        node->prev->next = node->next;
-        node->next->prev = node->prev;
-    }
-    
-    void moveToHead(Node* node) {
-        removeNode(node);
-        addToHead(node);
-    }
-    
-    Node* removeTail() {
-        Node* node = tail->prev;
-        removeNode(node);
-        return node;
-    }
-    
-public:
-    LRUCache(int capacity) : capacity(capacity) {
-        head = new Node(0, 0);
-        tail = new Node(0, 0);
-        head->next = tail;
-        tail->prev = head;
-    }
-    
-    int get(int key) {
-        if (cache.find(key) == cache.end()) {
-            return -1;
-        }
-        Node* node = cache[key];
-        moveToHead(node);  // 最近使用，移到開頭
-        return node->value;
-    }
-    
-    void put(int key, int value) {
-        if (cache.find(key) != cache.end()) {
-            // 已存在，更新值並移到開頭
-            Node* node = cache[key];
-            node->value = value;
-            moveToHead(node);
-        } else {
-            // 新增節點
-            Node* node = new Node(key, value);
-            cache[key] = node;
-            addToHead(node);
-            
-            if (cache.size() > capacity) {
-                // 超過容量，移除最久未使用的
-                Node* removed = removeTail();
-                cache.erase(removed->key);
-                delete removed;
-            }
-        }
-    }
-    
-    ~LRUCache() {
-        Node* current = head;
-        while (current) {
-            Node* next = current->next;
-            delete current;
-            current = next;
-        }
-    }
-};
-```
-
-**7. 效能優化技巧**
-
-```cpp
-// 優化 1：批次插入
-void batchInsert(const std::vector<int>& values) {
-    if (values.empty()) return;
-    
-    // 一次建立所有節點並連結
-    Node* first = new Node(values[0]);
-    Node* current = first;
-    
-    for (size_t i = 1; i < values.size(); i++) {
-        current->next = new Node(values[i]);
-        current = current->next;
-    }
-    
-    // 一次性連接到串列
-    if (tail) {
-        tail->next = first;
-        tail = current;
-    } else {
-        head = first;
-        tail = current;
-    }
-    
-    count += values.size();
-}
-
-// 優化 2：避免重複遍歷
-void insertAndDelete(int insertPos, int insertVal, int deletePos) {
-    // 錯誤：兩次遍歷
-    // insertAt(insertPos, insertVal);  // 遍歷一次
-    // deleteAt(deletePos);              // 又遍歷一次
-    
-    // 優化：一次遍歷完成兩個操作
-    // （如果 insertPos 和 deletePos 接近）
-    // ...實作細節
-}
-
-// 優化 3：使用記憶體池
-class PooledLinkedList {
-private:
-    static const int POOL_SIZE = 1000;
-    Node nodePool[POOL_SIZE];
-    int poolIndex = 0;
-    
-    Node* allocateNode(int value) {
-        if (poolIndex < POOL_SIZE) {
-            Node* node = &nodePool[poolIndex++];
-            node->data = value;
-            node->next = nullptr;
-            return node;
-        }
-        return new Node(value);  // fallback
-    }
-};
-```
-
-### 參考來源
-[1] Yuan Ze University, "CS203A Data Structures - Linked Lists (Chapter 4)," Lecture Slides, pp. 20-30.  
-[2] T. H. Cormen, C. E. Leiserson, R. L. Rivest, and C. Stein, *Introduction to Algorithms*, 3rd ed. MIT Press, 2009, Ch. 10 "Elementary Data Structures."  
-[3] LeetCode, "LRU Cache Problem," https://leetcode.com/problems/lru-cache/
-
-### 理解檢核
-
-1. **問題**：為什麼在插入操作中，必須先設定 `newNode->next = target->next`，然後才設定 `target->next = newNode`？如果順序反過來會發生什麼？
-
-   **答案**：如果先執行 `target->next = newNode`，原本 `target->next` 指向的節點連結就丟失了。當執行 `newNode->next = target->next` 時，會讓 newNode 指向自己（因為此時 target->next 已經是 newNode），形成循環或者原有節點鏈斷裂。正確順序是：先保存原有連結（newNode->next = target->next），再修改前一個節點的指標（target->next = newNode）。
-
-2. **問題**：為什麼單向鏈結串列刪除尾節點需要 O(n) 時間，而刪除頭節點只需要 O(1) 時間？
-
-   **答案**：刪除頭節點只需要更新 head 指標（`head = head->next`）並釋放原頭節點，不需要遍歷。但刪除尾節點需要更新倒數第二個節點的 next 指標為 nullptr，而在單向鏈結串列中，從尾節點無法回溯到前一個節點，必須從頭開始遍歷找到倒數第二個節點，因此需要 O(n) 時間。雙向鏈結串列因為有 prev 指標，可以直接回溯，所以刪除尾節點也是 O(1)。
-
-3. **問題**：在什麼情況下，維護 tail 指標的額外開銷是值得的？
-
-   **答案**：當應用場景需要頻繁在尾端插入元素時，維護 tail 指標可以將插入尾端操作從 O(n) 優化到 O(1)。典型場景包括：佇列（Queue）實作、日誌記錄系統、任務排程系統等。代價是每次插入刪除時需要額外維護 tail 指標，並多佔用一個指標變數的記憶體。如果主要操作是隨機插入刪除或很少操作尾端，則不值得維護 tail。
-
----
-
-## Page 54-72 — 節點重排與指標操作
-
-### 摘要
-本部分通過具體範例深入探討鏈結串列中的節點重排操作（MoveTo），強調指標操作的順序至關重要。展示了錯誤順序如何導致「懸空節點」（dangling node）的產生，以及正確的操作步驟。這是理解鏈結串列進階操作的關鍵，為後續的排序演算法奠定基礎。
-
-### 重點整理
-
-**節點重排範例：交換 Prev 和 Target**
-
-給定串列：`Head → [2] → [3] → [1] → NULL`
-
-目標：交換節點 2 和 3 的位置
-
-**錯誤順序**（會產生懸空節點）：
-```
-步驟：
-1. Head = Target  (Head 指向 3)
-2. Target->next = Prev  (3 指向 2)
-3. Prev->next = Target->next  (2 指向 3，形成循環！)
-
-結果：Head → [3] → [2] → [3] → ...  (循環)
-      [1] 變成懸空節點
-```
-
-**正確順序**（避免懸空節點）：
-```
-步驟：
-1. Head = Target  (Head 指向 3)
-2. Prev->next = Target->next  (2 指向 1，先保存後續連結)
-3. Target->next = Prev  (3 指向 2)
-
-結果：Head → [3] → [2] → [1] → NULL  (正確！)
-```
-
-**關鍵原則**：
-- 先處理「保存連結」的操作
-- 再處理「修改指標」的操作
-- 避免過早覆蓋需要的指標資訊
-
-### <加深的內容>
-
-**為什麼指標順序如此重要？**
-
-指標操作的本質是修改記憶體中儲存的位址值。一旦覆蓋，原有資訊就永久丟失：
-
-```cpp
-// 視覺化指標操作
-struct Node {
-    int data;
-    Node* next;
-};
-
-void demonstratePointerOrder() {
-    // 初始狀態
-    Node* node1 = new Node{2, nullptr};
-    Node* node2 = new Node{3, nullptr};
-    Node* node3 = new Node{1, nullptr};
-    
-    node1->next = node2;  // 2 → 3
-    node2->next = node3;  // 3 → 1
-    
-    Node* head = node1;
-    Node* prev = node1;
-    Node* target = node2;
-    
-    cout << "初始:\n";
-    cout << "head = " << head << " (指向節點 2)\n";
-    cout << "prev = " << prev << " (指向節點 2)\n";
-    cout << "target = " << target << " (指向節點 3)\n";
-    cout << "prev->next = " << prev->next << " (應該是 target)\n";
-    cout << "target->next = " << target->next << " (指向節點 1)\n\n";
-    
-    // 錯誤順序演示
-    cout << "=== 錯誤順序 ===\n";
-    Node* savedTargetNext = target->next;  // 保存以便觀察
-    
-    // 步驟 1
-    head = target;
-    cout << "步驟 1 後: head = " << head << "\n";
-    
-    // 步驟 2
-    target->next = prev;
-    cout << "步驟 2 後: target->next = " << target->next 
-         << " (現在指向 prev)\n";
-    cout << "問題：原本的 target->next (指向節點 1) 已經丟失!\n";
-    
-    // 步驟 3
-    prev->next = target->next;  // 這會讓 prev->next 指向 prev 自己！
-    cout << "步驟 3 後: prev->next = " << prev->next << "\n";
-    cout << "嚴重問題：形成循環！prev->next 指向 target，\n";
-    cout << "           target->next 指向 prev\n";
-}
-```
-
-**正確操作的記憶體狀態變化**
-
-```cpp
-void correctReorderingSteps() {
-    // 設定初始串列：2 → 3 → 1 → NULL
-    Node* node1 = new Node{2, nullptr};
-    Node* node2 = new Node{3, nullptr};
-    Node* node3 = new Node{1, nullptr};
-    node1->next = node2;
-    node2->next = node3;
-    
-    Node* head = node1;
-    Node* prev = node1;
-    Node* target = node2;
-    
-    // 正確順序
-    cout << "初始狀態：\n";
-    printList(head);  // 2 → 3 → 1 → NULL
-    
-    // 步驟 1：更新 head
-    head = target;
-    cout << "\n步驟 1 (head = target)：\n";
-    cout << "head 現在指向節點 3\n";
-    cout << "但串列結構未變：";
-    printList(node1);  // 從原 head 看仍是 2 → 3 → 1 → NULL
-    
-    // 步驟 2：斷開 prev 與 target 的連結，連接到後續節點
-    Node* afterTarget = target->next;  // 保存節點 1 的位址
-    prev->next = afterTarget;
-    cout << "\n步驟 2 (prev->next = target->next)：\n";
-    cout << "節點 2 現在跳過節點 3，直接指向節點 1\n";
-    printList(node1);  // 從節點 2 看：2 → 1 → NULL (節點 3 已脫離)
-    printList(target);  // 從節點 3 看：3 → 1 → NULL (仍指向原位置)
-    
-    // 步驟 3：讓 target 指向 prev
-    target->next = prev;
-    cout << "\n步驟 3 (target->next = prev)：\n";
-    cout << "節點 3 現在指向節點 2\n";
-    printList(head);  // 從新 head 看：3 → 2 → 1 → NULL (完成！)
-    
-    // 清理
-    delete node1;
-    delete node2;
-    delete node3;
-}
-```
-
-**通用的節點重排模式**
-
-```cpp
-// 通用模式：在單向鏈結串列中重排節點
-class LinkedListReordering {
-public:
-    // 模式 1：交換相鄰節點
-    static void swapAdjacent(Node*& head, Node* first) {
-        if (!first || !first->next) return;
-        
-        Node* second = first->next;
-        
-        // 關鍵：先保存 second 的 next
-        Node* afterSecond = second->next;
-        
-        // 重新連結
-        second->next = first;
-        first->next = afterSecond;
-        
-        // 如果 first 是頭節點，更新 head
-        if (head == first) {
-            head = second;
-        }
-    }
-    
-    // 模式 2：將節點移到開頭
-    static void moveToFront(Node*& head, Node* target, Node* prev) {
-        if (!target || head == target) return;
-        
-        // 步驟順序很重要！
-        prev->next = target->next;  // 先斷開 target
-        target->next = head;         // target 指向原 head
-        head = target;               // 更新 head
-    }
-    
-    // 模式 3：將節點移到指定位置之後
-    static void moveAfter(Node* position, Node* target, Node* targetPrev) {
-        if (!target || !position) return;
-        
-        // 斷開 target
-        targetPrev->next = target->next;
-        
-        // 插入到 position 後
-        target->next = position->next;
-        position->next = target;
-    }
-};
-```
-
-**常見錯誤與陷阱**
-
-```cpp
-// 錯誤 1：過早覆蓋指標導致循環
-void badMove(Node* prev, Node* target) {
-    target->next = prev;  // 錯誤：先改 target->next，丟失原連結
-    prev->next = target->next;  // 現在 target->next 已改，造成循環
-}
-
-// 錯誤 2：未處理頭節點交換
-void badSwapFirst(Node*& head, Node* first, Node* second) {
-    first->next = second->next;
-    second->next = first;
-    // 錯誤：忘記更新 head 為 second
-}
-
-// 錯誤 3：懸空節點
-void badReorder(Node* prev, Node* target) {
-    prev->next = target;  // 可能造成原有 target->next 遺失
-}
-```
-
-**效能優化技巧**
-
-```cpp
-// 優化 1：使用 dummy node 簡化重排
-Node* reorderWithDummy(Node* head) {
-    Node dummy;
-    dummy.next = head;
-    Node* prev = &dummy;
-    
-    // 假設重排邏輯...
-    while (prev->next) {
-        if (prev->next->data > prev->next->next->data) {
-            Node* temp = prev->next->next;
-            prev->next->next = temp->next;
-            temp->next = prev->next;
-            prev->next = temp;
-        }
-        prev = prev->next;
-    }
-    return dummy.next;
-}
-
-// 優化 2：批次重排
-void batchReorder(std::vector<Node*>& nodes) {
-    // 假設 nodes 是要重排的節點列表
-    for (size_t i = 0; i < nodes.size() - 1; i++) {
-        if (nodes[i]->data > nodes[i+1]->data) {
-            std::swap(nodes[i], nodes[i+1]);
-        }
-    }
-}
-```
-
-### 參考來源
-[1] Yuan Ze University, "CS203A Data Structures - Linked Lists (Chapter 4)," Lecture Slides, pp. 54-72.  
-[2] GeeksforGeeks, "Swap Nodes in Linked List," https://www.geeksforgeeks.org/swap-nodes-in-a-linked-list-without-swapping-data/  
-[3] LeetCode, "Sort List," https://leetcode.com/problems/sort-list/
-
-### 理解檢核
-
-1. **問題**：在 MoveTo 操作中，為什麼錯誤順序會產生懸空節點？如何避免？
-
-   **答案**：錯誤順序（如先改 target->next = prev）會覆蓋原有連結資訊，導致後續節點無法存取，形成懸空節點。避免方法：先保存必要連結（如 afterTarget = target->next），再修改指標。原則是先斷開再重新連結。
-
-2. **問題**：在交換兩個相鄰節點時，如果第一個是頭節點，需注意什麼？
-
-   **答案**：需更新 head 指向新第一節點（second）。忽略此步會導致 head 仍指向舊節點，列表頭部錯誤。使用 dummy node 可簡化此邊界情況。
-
-3. **問題**：指標操作的依賴性如何影響重排演算法的設計？
-
-   **答案**：指標依賴意味著修改順序必須考慮資訊丟失（如 target->next 被覆蓋前需保存）。設計時，先分析所有必要連結，引入臨時變數保存，再逐步修改。雙向鏈結串列因有 prev 可減輕依賴問題。
-
----
-
-## Page 73-96 — 鏈結串列排序
-
-### 摘要
-本部分討論鏈結串列的排序演算法，以選擇排序（Selection Sort）為例。比較陣列與鏈結串列的實作差異：陣列交換值，鏈結串列可交換值或指標。強調指標交換的優勢（維持穩定性），並步驟分解過程，使用 dummy node 優化邊界。
-
-### 重點整理
-
-**選擇排序核心**：
-- 從未排序部分找最小值
-- 與未排序首元素交換
-- 分 sorted / unsorted 兩部分
-
-**鏈結串列實作變體**：
-- 交換值：簡單但不穩定
-- 交換指標：穩定，使用 MoveTo 操作
-
-### PDF 原文：陣列選擇排序
-
-```pseudocode
-procedure selectionSort(A[1..n]):
-  for i from 1 to n-1:
-    minIndex = i
-    for j from i+1 to n:
-      if A[j] < A[minIndex]:
-        minIndex = j
-    swap A[i] and A[minIndex]
-```
-
-### <加深的內容>
-
-**鏈結串列選擇排序 - 交換值**
-
-```cpp
-void selectionSortValue(Node* head) {
-    for (Node* i = head; i && i->next; i = i->next) {
-        Node* minNode = i;
-        for (Node* j = i->next; j; j = j->next) {
-            if (j->data < minNode->data) minNode = j;
-        }
-        if (minNode != i) {
-            std::swap(i->data, minNode->data);
-        }
-    }
-}
-```
-
-**鏈結串列選擇排序 - 交換指標**
-
-```cpp
-Node* selectionSortPointer(Node* head) {
-    if (!head) return head;
-    Node dummy{0, head};  // Dummy node 簡化頭部處理
-    Node* sortedTail = &dummy;
-    
-    while (sortedTail->next) {
-        Node* minPrev = sortedTail;
-        for (Node* p = sortedTail; p->next; p = p->next) {
-            if (p->next->data < minPrev->next->data) {
-                minPrev = p;
-            }
-        }
-        Node* minNode = minPrev->next;
-        // Detach minNode
-        minPrev->next = minNode->next;
-        // Insert after sortedTail
-        minNode->next = sortedTail->next;
-        sortedTail->next = minNode;
-        sortedTail = sortedTail->next;
-    }
-    return dummy.next;
-}
-```
-
-**穩定性比較**
-
-- 交換值：不穩定（相同值順序可能變）
-- 交換指標：穩定（保留原相對順序）
-
-**效能分析**
-
-| 操作 | 陣列 | 鏈結串列 (交換值) | 鏈結串列 (交換指標) |
-|------|------|-----------------|-------------------|
-| 時間複雜度 | O(n^2) | O(n^2) | O(n^2) |
-| 空間複雜度 | O(1) | O(1) | O(1) |
-| 穩定性 | 不穩定 | 不穩定 | 穩定 |
-
-**常見錯誤與陷阱**
-
-```cpp
-// 錯誤 1：未處理 dummy node 導致頭部錯誤
-Node* badSort(Node* head) {
-    // 缺少 dummy，頭部交換失敗
-    Node* sortedTail = head;  // 錯誤
-    // ...
-}
-
-// 錯誤 2：找 min 時未檢查 next
-for (Node* p = sortedTail; p; p = p->next) {  // 錯誤：應 p->next
-    if (p->data < minPrev->next->data) {  // 錯比 p 而非 p->next
-        // ...
-    }
-}
-```
-
-**效能優化技巧**
-
-```cpp
-// 優化 1：提早終止（已排序檢查）
-bool isSorted(Node* head) {
-    while (head && head->next) {
-        if (head->data > head->next->data) return false;
-        head = head->next;
-    }
-    return true;
-}
-
-// 優化 2：合併排序（更好複雜度 O(n log n)）
-Node* mergeSort(Node* head) {
-    if (!head || !head->next) return head;
-    
-    // 找中點
-    Node* slow = head;
-    Node* fast = head->next;
-    while (fast && fast->next) {
-        slow = slow->next;
-        fast = fast->next->next;
-    }
-    Node* mid = slow->next;
-    slow->next = nullptr;
-    
-    // 遞迴排序
-    Node* left = mergeSort(head);
-    Node* right = mergeSort(mid);
-    
-    // 合併
-    Node dummy(0);
-    Node* tail = &dummy;
-    while (left && right) {
-        if (left->data < right->data) {
-            tail->next = left;
-            left = left->next;
-        } else {
-            tail->next = right;
-            right = right->next;
-        }
-        tail = tail->next;
-    }
-    tail->next = left ? left : right;
-    return dummy.next;
-}
-```
-
-### 參考來源
-[1] Yuan Ze University, "CS203A Data Structures - Linked Lists (Chapter 4)," Lecture Slides, pp. 73-96.  
-[2] T. H. Cormen, C. E. Leiserson, R. L. Rivest, and C. Stein, *Introduction to Algorithms*, 3rd ed. MIT Press, 2009, Ch. 2 "Getting Started."  
-[3] LeetCode, "Sort List," https://leetcode.com/problems/sort-list/
-
-### 理解檢核
-
-1. **問題**：鏈結串列選擇排序中，交換指標比交換值有何優勢？
-
-   **答案**：交換指標維持排序穩定性（相同值保留原順序），而交換值不穩定。指標交換也避免資料複製開銷，尤其資料複雜時。但需小心指標順序，避免懸空節點。
-
-2. **問題**：在選擇排序中使用 dummy node 的好處是什麼？
-
-   **答案**：Dummy node 簡化頭部邊界處理（如頭為最小值），讓所有操作統一（無需特殊檢查 head）。它充當虛擬前驅，讓 sortedTail 從 dummy 開始。
-
-3. **問題**：為什麼選擇排序在鏈結串列中仍是 O(n^2)，無法優化？
-
-   **答案**：找最小值需 O(n) 遍歷未排序部分，每次迭代都如此，總計 O(n^2)。鏈結串列無隨機存取，無法如陣列般優化。更好選擇是合併排序 (O(n log n))。
-
----
-
-## Page 97-104 — 指標交換進階
-
-### 摘要
-本部分探討透過指標操縱交換兩個節點，強調前驅節點（predecessor）的重要性。在單向鏈結串列中，交換需知道 a' 和 b'（a 和 b 的前驅）。示範步驟，並警告未處理前驅會導致錯誤連結。
-
-### 重點整理
-
-**交換步驟**：
-1. 保存臨時指標：temp_a = a, temp_b = b
-2. 更新前驅：a'->next = b, b'->next = a
-3. 更新節點：a->next = temp_b->next, b->next = temp_a->next
-
-**關鍵**：單向鏈結串列交換需前驅；雙向更簡單。
-
-### <加深的內容>
-
-**交換兩個節點**
-
-```cpp
-void swapNodes(Node*& head, Node* a, Node* b) {
-    if (!a || !b || a == b) return;
-    
-    // 找前驅 (假設已知或遍歷找)
-    Node* aPrev = findPrev(head, a);
-    Node* bPrev = findPrev(head, b);
-    
-    if (!aPrev || !bPrev) return;
-    
-    // 如果 a 是頭
-    if (a == head) head = b;
-    else if (b == head) head = a;
-    
-    // 保存 next
-    Node* aNext = a->next;
-    Node* bNext = b->next;
-    
-    // 更新前驅
-    aPrev->next = b;
-    bPrev->next = a;
-    
-    // 更新節點
-    a->next = bNext;
-    b->next = aNext;
-}
-
-Node* findPrev(Node* head, Node* target) {
-    Node* prev = nullptr;
-    Node* curr = head;
-    while (curr != target) {
-        prev = curr;
-        curr = curr->next;
-    }
-    return prev;
-}
-```
-
-**常見錯誤與陷阱**
-
-```cpp
-// 錯誤 1：未處理頭節點交換
-void badSwap(Node* a, Node* b) {
-    Node* temp = a->next;
-    a->next = b->next;
-    b->next = temp;
-    // 錯誤：若 a/b 是頭，head 未更新
-}
-
-// 錯誤 2：相鄰節點交換遺漏
-void badAdjacentSwap(Node* a, Node* b) {
-    a->next = b->next;
-    b->next = a;  // 錯誤：未處理前驅
-}
-```
-
-### 參考來源
-[1] Yuan Ze University, "CS203A Data Structures - Linked Lists (Chapter 4)," Lecture Slides, pp. 97-104.  
-[2] GeeksforGeeks, "Swap Nodes in Linked List Without Swapping Data," https://www.geeksforgeeks.org/swap-nodes-in-a-linked-list-without-swapping-data/
-
-### 理解檢核
-
-1. **問題**：為什麼單向鏈結串列交換節點需知道前驅節點？
-
-   **答案**：因為無法從節點回溯前一個，需更新前驅->next 指向新節點。無前驅無法斷開原連結，導致錯誤或遺失節點。
-
-2. **問題**：交換兩個節點時，如果其中一個是頭節點，需額外處理什麼？
-
-   **答案**：更新 head 指向新頭節點（如交換 head 和 b，head = b）。忽略會導致列表頭指向錯誤。
-
-3. **問題**：指標交換與值交換在穩定性上有何差異？
-
-   **答案**：指標交換穩定（保留相對順序），值交換不穩定（相同值可能換位）。指標交換適合需穩定排序的場景。
-
----
-
-## Page 105-108 — AI 學習提示與總結
-
-### 摘要
-本部分提供使用 AI 學習鏈結串列的提示，從進階類型、複雜操作到實際應用。強調時間/空間分析、邊界處理與優化。作為章節總結，鼓勵實作與分析。
-
-### 重點整理
-
-**AI 學習提示**：
-1. 進階類型：雙向/循環/比較
-2. 複雜操作：插入/刪除/搜尋/反轉
-3. 演算法：合併/循環偵測/中點/去重
-4. 記憶體與錯誤：分配/邊界/洩漏
-5. 效能：複雜度/陣列 vs 鏈結/貿易-off
-6. 技巧：sentinel/雙指標/遞迴/模板
-7. 應用：堆疊/佇列/Undo/雜湊/播放列表
-
-### <加深的內容>
-
-**實作範例：合併兩個排序鏈結串列**
-
-```cpp
-Node* mergeTwoLists(Node* l1, Node* l2) {
-    Node dummy(0);
-    Node* tail = &dummy;
-    
-    while (l1 && l2) {
-        if (l1->data < l2->data) {
-            tail->next = l1;
-            l1 = l1->next;
-        } else {
-            tail->next = l2;
-            l2 = l2->next;
-        }
-        tail = tail->next;
-    }
-    tail->next = l1 ? l1 : l2;
-    return dummy.next;
-}
-```
-
-**循環偵測（Floyd 演算法）**
-
-```cpp
-bool hasCycle(Node* head) {
-    if (!head) return false;
-    Node* slow = head;
-    Node* fast = head;
-    while (fast && fast->next) {
-        slow = slow->next;
-        fast = fast->next->next;
-        if (slow == fast) return true;
-    }
-    return false;
-}
-```
-
-### 參考來源
-[1] Yuan Ze University, "CS203A Data Structures - Linked Lists (Chapter 4)," Lecture Slides, pp. 105-108.  
-[2] LeetCode, "Merge Two Sorted Lists," https://leetcode.com/problems/merge-two-sorted-lists/  
-[3] LeetCode, "Linked List Cycle," https://leetcode.com/problems/linked-list-cycle/
-
-### 理解檢核
-
-1. **問題**：何時使用 sentinel node？
-
-   **答案**：簡化邊界如頭/尾操作，避免特殊檢查空列表或頭刪除。常見於排序、合併。
-
-2. **問題**：Floyd 循環偵測如何工作？
-
-   **答案**：慢指標每次一步，快指標兩步。若有循環，快慢終會相遇（因相對速度）。時間 O(n)，空間 O(1)。
-
-3. **問題**：鏈結串列適合哪些應用，而非陣列？
-
-   **答案**：頻繁插入/刪除（如 Undo）、未知大小（如播放列表）、循環（如輪詢）。不適合隨機存取。
+## 參考來源
+
+[1] Yuan Ze University, "CS203A Data Structures - Linked Lists (Chapter 4)," Lecture Slides.
+[2] T. H. Cormen, C. E. Leiserson, R. L. Rivest, and C. Stein, *Introduction to Algorithms*, 3rd ed. MIT Press, 2009, Ch. 10 "Elementary Data Structures."
+[3] T. H. Cormen, C. E. Leiserson, R. L. Rivest, and C. Stein, *Introduction to Algorithms*, 3rd ed. MIT Press, 2009, Ch. 17 "Amortized Analysis."
+[4] B. Stroustrup, *The C++ Programming Language*, 4th ed. Addison-Wesley, 2013, Ch. 13 "Exception Handling."
+[5] GeeksforGeeks, "Circular Linked List," https://www.geeksforgeeks.org/circular-linked-list/
