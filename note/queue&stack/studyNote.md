@@ -1,126 +1,195 @@
-# 堆疊與佇列筆記
+# 堆疊與佇列學習筆記
 
-## 第 1 部分：陣列介紹與輸入/輸出限制
-### PDF 原始內容總結
-- 第 1 頁：標題「Data Structures - STACKS & QUEUES (CHAPTER 3)」。
-- 第 2 頁：介紹陣列，以整數陣列 [64, 34, 25, 12, 22, 11, 90, 8] 為例。
-- 第 3 頁：討論輸入/輸出的限制。情境 1：僅一個入口用於輸入和輸出（類似堆疊）。情境 2：一個輸入入口、一個輸出出口，且不同（類似佇列）。顯示陣列的 90° 旋轉視覺化。
+## 一、前置基礎：陣列與受限存取的概念
 
-**<加深的內容>**：陣列是連續記憶體區塊，適合隨機存取（O(1) 時間），但靜態實作中大小固定。這些限制突顯堆疊和佇列是如何從陣列或鏈結串列衍生的「受限」線性結構，強制操作紀律以模擬特定行為（堆疊的 LIFO，佇列的 FIFO）。範例陣列用於整個 PDF 模擬插入，顯示方向如何影響資料流。
+陣列（Array）是計算機中最基本的線性資料結構，它佔據一塊連續的記憶體空間，並透過索引（Index）直接存取元素，時間複雜度為 O(1)。我們通常用類似 `[64, 34, 25, 12, 22, 11, 90, 8]` 的整數序列來表示一個陣列。
 
-**<額外加深加廣的內容>**：在現代計算中，陣列可動態調整（例如 C++ 的 std::vector），允許調整大小。這涉及攤銷分析—調整大小時容量加倍，使平均插入為 O(1)。擴展到多維陣列用於矩陣，但對堆疊/佇列而言，1D 足夠。現實應用：嵌入式系統（如微控制器）中的陣列因記憶體限制而有嚴格大小。
+陣列雖然存取快速，但在靜態實作中大小固定，缺乏靈活性。更重要的是，陣列允許對任何位置的元素進行隨機存取和修改。這種「全能」的特性在某些情境下並非優點，反而可能導致錯誤。因此，我們引入了兩種對陣列操作施加特定限制的抽象資料型別（ADT）：**堆疊（Stack）** 和 **佇列（Queue）**。它們被稱為「受限的線性結構」。
 
-### 程式碼範例：C++ 中的基本陣列（說明第 2 頁）
+### 核心概念：存取限制決定了資料結構的行為
+*   **情境一：單一入口點（Stack 的雛形）**：想像一個只有一個開口的口袋。你只能從這個開口放入（Push）或取出（Pop）物品，最後放進去的東西會最先被拿出來。這種行為模式稱為 **LIFO（後進先出，Last-In-First-Out）**。
+*   **情境二：分離的入口與出口（Queue 的雛形）**：想像一個排隊的隊伍。新來的人從隊伍的**尾端（Rear）** 加入（Enqueue），而服務總是從隊伍的**前端（Front）** 離開（Dequeue）。這種行為模式稱為 **FIFO（先進先出，First-In-First-Out）**。
+
+將陣列在視覺上旋轉90度，可以幫助我們理解這些限制：垂直的陣列就像一個垂直的容器，限制存取點（頂部或兩端）就模擬了上述的行為。
+
+#### 延伸理解
+*   **動態陣列**：現代程式語言（如 C++ 的 `std::vector`）提供了可動態調整大小的陣列。其原理是當容量不足時，分配一塊更大的新記憶體，將舊資料複製過去。透過「攤銷分析（Amortized Analysis）」，可以證明其平均插入成本仍為 O(1)。
+*   **應用場景**：在資源受限的系統（如嵌入式微控制器）中，靜態大小的陣列因其確定性和低開銷而被廣泛使用。
+
+#### 範例程式碼：基礎陣列
 ```cpp
 #include <iostream>
-#define MAX_SIZE 8  // 如 PDF 中的固定大小
+#define MAX_SIZE 8  // 靜態定義大小，如範例所示
 
 int main() {
-    int arr[MAX_SIZE] = {64, 34, 25, 12, 22, 11, 90, 8};  // PDF 中的整數陣列
+    // 初始化一個與筆記範例相同的整數陣列
+    int arr[MAX_SIZE] = {64, 34, 25, 12, 22, 11, 90, 8};
     
-    // 列印陣列以視覺化
-    std::cout << "整數陣列: ";
+    std::cout << "整數陣列內容: ";
     for (int i = 0; i < MAX_SIZE; ++i) {
-        std::cout << arr[i] << " ";
+        std::cout << arr[i] << " "; // 隨機存取：直接透過索引 i 讀取
     }
     std::cout << std::endl;
     
+    // 嘗試「不受限」地修改中間元素
+    arr[3] = 100; // 直接將第4個元素（12）改為100
+    std::cout << "修改後 arr[3]: " << arr[3] << std::endl;
+    
     return 0;
 }
-// 想法：這設定基本結構。我們將在堆疊/佇列中限制存取。
+// 這個程式展示了陣列的隨機存取能力。堆疊和佇列將封裝此陣列，並限制存取方式。
 ```
 
-### 從 PDF 提示延伸學習想法（第 3 頁：情境）
-PDF 旋轉陣列以視覺化垂直堆疊/佇列。問題：為什麼限制方向？答案：為了強制順序—不受限陣列允許隨機存取，但堆疊/佇列防止它以確保安全（例如，並行程式設計中避免無效狀態）。延伸：在作業系統中，堆疊管理函式呼叫（無隨機 pop）；佇列處理程序排程（公平 FIFO）。
+---
 
-## 第 2 部分：情境 1 - 單一入口（堆疊概念與陣列實作）（第 4-7 頁）
-### PDF 原始內容總結
-- 第 4-6 頁：針對整數 [64,34,25,12,22,11,90,8]，選擇底部/頂部。「a」（索引 0）作為底部較好。顯示陣列填充，top 從 0 或 max_size-1 開始。
-- 第 7 頁：為什麼「a」作為底部較好？top==0 表示空，top==max_size-1 表示滿。使用 realloc() 擴展陣列儲存時，只需修改 max_size，無需移位。
+## 二、堆疊（Stack）的詳解與實作
 
-**<加深的內容>**：選擇底部在索引 0 符合陣列從低到高位址增長。Push：arr[top++] = value；Pop：return arr[--top]。檢查：空（top == -1 或 0，取決於初始化），滿（top == max_size）。PDF 的選擇避免移位元素，這會是 O(n) 成本。
+### 1. 定義與抽象資料型別（ADT）
+堆疊是一種遵循 **LIFO** 原則的線性結構。常見的比喻是疊盤子：你總是將新盤子放在最上面（Push），也總是從最上面拿走盤子（Pop）。
 
-**<額外加深加廣的內容>**：在動態堆疊中，使用 vector 自動調整大小。擴展到執行緒安全：多執行緒中的堆疊需要鎖定以防止 top 的競爭條件。現實應用：瀏覽器歷史記錄（後退按鈕 pop 最後頁面）。變體：雙端堆疊，在一個陣列中兩個堆疊。
+**堆疊的抽象操作（ADT）包括**：
+*   `CreateS()`: 建立一個空堆疊。
+*   `IsFull(S)`: 檢查堆疊 S 是否已滿。
+*   `IsEmpty(S)`: 檢查堆疊 S 是否為空。
+*   `Push(S, item)`: 將項目 `item` 放入堆疊 S 的頂部。
+*   `Pop(S)`: 從堆疊 S 的頂部移除並返回一個項目。
 
-### 程式碼範例：C++ 中的陣列基礎堆疊（基於 PDF 範例）
+### 2. 使用陣列實作堆疊
+實作時需要一個陣列 `stack[]`、一個標記頂部位置的變數 `top`、以及一個代表容量的 `MAX_SIZE`。
+
+**設計關鍵：底部與頂部的選擇**
+如果將陣列索引 `0` 的位置作為堆疊**底部（Bottom）**，`top` 指向最後一個有效元素（初始化為 `-1` 表示空堆疊），其優點在於：
+1.  **直觀**：符合記憶體位址增長方向。
+2.  **擴展高效**：當需要動態擴容時（例如使用 `realloc`），只需要在陣列後方增加空間，無需移動現有元素。
+3.  **判斷簡單**：`top == -1` 表示空；`top == MAX_SIZE - 1` 表示滿。
+
+**基本操作邏輯**：
+*   **Push**: 先檢查是否已滿。若未滿，則將 `top` 加 1，然後將值存入 `stack[top]`。
+*   **Pop**: 先檢查是否為空。若不為空，則先讀取 `stack[top]` 的值，然後將 `top` 減 1。
+
+#### 範例程式碼：陣列實作堆疊
 ```cpp
 #include <iostream>
 #define MAX_SIZE 8
 
-class Stack {
+class ArrayStack {
 private:
     int arr[MAX_SIZE];
-    int top;  // 頂部元素的索引
+    int top; // 指向頂部元素的索引
     
 public:
-    Stack() : top(-1) {}  // 初始化為空（top == -1 用於空檢查）
+    // 建構子：初始化空堆疊，top = -1
+    ArrayStack() : top(-1) {}
     
     bool isEmpty() { return top == -1; }
-    bool isFull() { return top == MAX_SIZE - 1; }
+    bool isFull()  { return top == MAX_SIZE - 1; }
     
     void push(int value) {
         if (isFull()) {
-            std::cout << "堆疊已滿！" << std::endl;
+            std::cout << "堆疊已滿！無法加入 " << value << std::endl;
             return;
         }
-        arr[++top] = value;  // 先遞增 top 再插入（底部在 0）
+        arr[++top] = value; // top先加1，再存入值
+        std::cout << "已推入: " << value << std::endl;
     }
     
     int pop() {
         if (isEmpty()) {
             std::cout << "堆疊已空！" << std::endl;
-            return -1;  // 錯誤值
+            return -1; // 返回一個錯誤碼
         }
-        return arr[top--];  // 先返回再遞減
+        int value = arr[top--]; // 先取值，再將top減1
+        std::cout << "已彈出: " << value << std::endl;
+        return value;
+    }
+    
+    void display() {
+        if (isEmpty()) {
+            std::cout << "堆疊為空。" << std::endl;
+            return;
+        }
+        std::cout << "堆疊內容 (頂->底): ";
+        for (int i = top; i >= 0; --i) {
+            std::cout << arr[i] << " ";
+        }
+        std::cout << std::endl;
     }
 };
 
 int main() {
-    Stack s;
-    int inputs[] = {64, 34, 25, 12, 22, 11, 90, 8};
-    for (int val : inputs) s.push(val);  // 模擬 PDF 插入
-    std::cout << "Pop: " << s.pop() << std::endl;  // 應為 8 (LIFO)
+    ArrayStack s;
+    int inputs[] = {64, 34, 25, 12};
+    
+    for (int val : inputs) s.push(val);
+    s.display(); // 顯示當前堆疊
+    
+    std::cout << "\n執行一次 pop():" << std::endl;
+    s.pop(); // 應彈出 12
+    s.display();
+    
     return 0;
 }
-// 想法：底部在索引 0 簡化擴展。如果動態，使用 std::vector<int> arr; arr.resize(2*size);
+// 此實作將陣列索引0作為底部，是最高效的方式。
+// 動態擴展思路：可以使用 std::vector<int> arr 替代陣列，在 push 時若空間不足，則執行 arr.resize(arr.size() * 2)。
 ```
 
-### 從 PDF 問題延伸學習想法（第 4/7 頁：為什麼「a」作為底部？）
-PDF 問：a 或 b？為什麼？答案：「a」（低索引）作為底部簡化檢查和擴展—無需移位元素時調整大小（O(n) vs. O(1) 附加）。延伸：在 C++ 中，realloc() 保留低到高順序。學習：用程式碼模擬—嘗試 top 在 max_size-1；插入需移位，證明低效。
+#### 延伸討論：為什麼選擇索引0作為底部？
+若選擇陣列末端（索引 `MAX_SIZE-1`）作為底部，`top` 初始化為 `MAX_SIZE`。在 `push` 時需要執行 `arr[--top] = value`。雖然邏輯可行，但當需要動態擴容時，必須將所有元素向後（向更高索引）移動，以騰出前面的空間，這會導致 O(n) 的時間成本，效率低下。因此，選擇索引0作為底部是更優的設計。
 
-## 第 3 部分：情境 2 - 分離入口/出口（佇列概念與陣列實作）（第 8-13 頁）
-### PDF 原始內容總結
-- 第 8-9 頁：選擇入口（a 或 b）。「a」作為 front（出口），「b」作為 rear（入口）。
-- 第 10-12 頁：陣列模擬，front/rear 初始為 -1。Enqueue：rear++，插入；Dequeue：front++。
-- 第 13 頁：全部 enqueue 後，dequeue 64,34,25—顯示 front 的浪費空間（非循環）。
+---
 
-**<加深的內容>**：非循環佇列在 dequeue 後浪費空間（front 前移，但陣列不移位）。滿：rear == max_size-1；空：front == rear。PDF 顯示線性佇列問題—dequeue 後無法 enqueue 而不移位（O(n)）。
+## 三、佇列（Queue）的詳解與實作
 
-**<額外加深加廣的內容>**：引入循環佇列修復浪費：rear = (rear + 1) % max_size。擴展到優先佇列（堆積）用於非 FIFO。現實應用：網路中的訊息佇列（例如 RabbitMQ 使用 FIFO 確保順序）。
+### 1. 定義與抽象資料型別（ADT）
+佇列是一種遵循 **FIFO** 原則的線性結構。就像在超市結帳排隊，先到的人先接受服務。
 
-### 程式碼範例：C++ 中的線性陣列基礎佇列（PDF 風格，非循環）
+**佇列的抽象操作（ADT）包括**：
+*   `CreateQ()`: 建立一個空佇列。
+*   `IsFullQ(Q)`: 檢查佇列 Q 是否已滿。
+*   `IsEmptyQ(Q)`: 檢查佇列 Q 是否為空。
+*   `AddQ(Q, item)` (或 `Enqueue`): 將項目 `item` 加入佇列 Q 的尾端。
+*   `DeleteQ(Q)` (或 `Dequeue`): 從佇列 Q 的前端移除並返回一個項目。
+
+### 2. 使用陣列實作佇列及其挑戰
+實作佇列需要兩個指標/索引：`front`（指向隊首元素）和 `rear`（指向隊尾元素的下一個空位）。還需要一個陣列 `queue[]` 和 `MAX_SIZE`。
+
+**「線性佇列」的問題**：
+如果簡單地讓 `front` 和 `rear` 只增不減，在執行多次 `dequeue` 後，`front` 會不斷後移。即使陣列前端空出許多位置，當 `rear` 到達陣列末端時，程式仍會判斷佇列已滿。這種現象稱為「**假性溢位（False Overflow）**」，因為陣列實際上並未真正佔滿。
+
+**解決方案：循環佇列（Circular Queue）**
+將陣列在邏輯上視為一個環。當指標到達陣列末端時，再前進一步就回到開頭。
+*   **初始化**：`front = 0`, `rear = 0`。
+*   **Enqueue**: `queue[rear] = item; rear = (rear + 1) % MAX_SIZE;`
+*   **Dequeue**: `item = queue[front]; front = (front + 1) % MAX_SIZE;`
+*   **判斷滿**：為了區分「滿」和「空」的狀態（因為 `front == rear` 可能表示空），通常有兩種策略：
+    1.  使用一個 `count` 變數記錄元素數量。`count == 0` 為空，`count == MAX_SIZE` 為滿。
+    2.  犧牲一個陣列單元：當 `(rear + 1) % MAX_SIZE == front` 時，即認為佇列已滿。
+
+#### 範例程式碼：循環佇列實作
 ```cpp
 #include <iostream>
 #define MAX_SIZE 8
 
-class Queue {
+class CircularQueue {
 private:
     int arr[MAX_SIZE];
-    int front, rear;
+    int front, rear, count; // 使用 count 輔助判斷
     
 public:
-    Queue() : front(-1), rear(-1) {}  // 如 PDF
+    CircularQueue() : front(0), rear(0), count(0) {}
     
-    bool isEmpty() { return front == -1; }
-    bool isFull() { return rear == MAX_SIZE - 1; }
+    bool isEmpty() { return count == 0; }
+    bool isFull()  { return count == MAX_SIZE; }
     
     void enqueue(int value) {
         if (isFull()) {
-            std::cout << "佇列已滿！" << std::endl;
+            std::cout << "佇列已滿！無法加入 " << value << std::endl;
             return;
         }
-        if (front == -1) front = 0;  // 首次 enqueue 設定 front
-        arr[++rear] = value;
+        arr[rear] = value;
+        rear = (rear + 1) % MAX_SIZE; // 循環移動
+        count++;
+        std::cout << "已入隊: " << value << std::endl;
     }
     
     int dequeue() {
@@ -128,73 +197,78 @@ public:
             std::cout << "佇列已空！" << std::endl;
             return -1;
         }
-        int val = arr[front++];
-        if (front > rear) { front = rear = -1; }  // 若空則重設
-        return val;
+        int value = arr[front];
+        front = (front + 1) % MAX_SIZE; // 循環移動
+        count--;
+        std::cout << "已出隊: " << value << std::endl;
+        return value;
+    }
+    
+    void display() {
+        if (isEmpty()) {
+            std::cout << "佇列為空。" << std::endl;
+            return;
+        }
+        std::cout << "佇列內容 (前->後): ";
+        int i = front;
+        for (int c = 0; c < count; ++c) {
+            std::cout << arr[i] << " ";
+            i = (i + 1) % MAX_SIZE;
+        }
+        std::cout << std::endl;
     }
 };
 
 int main() {
-    Queue q;
-    int inputs[] = {64, 34, 25, 12, 22, 11, 90, 8};
-    for (int val : inputs) q.enqueue(val);
-    std::cout << "Dequeue: " << q.dequeue() << " (64)" << std::endl;  // FIFO
+    CircularQueue q;
+    // 模擬筆記中的情境
+    for (int i = 1; i <= 6; ++i) q.enqueue(i*10); // 加入 10,20,30,40,50,60
+    q.display();
+    
+    std::cout << "\n執行三次 dequeue():" << std::endl;
+    q.dequeue(); // 10
+    q.dequeue(); // 20
+    q.dequeue(); // 30
+    q.display();
+    
+    std::cout << "\n再嘗試加入兩個元素:" << std::endl;
+    q.enqueue(70);
+    q.enqueue(80);
+    q.display(); // 應顯示 40,50,60,70,80，前端空間被成功復用
     return 0;
 }
-// 想法：匹配 PDF，但 dequeue 後空間浪費。循環版：使用 % MAX_SIZE。
 ```
 
-### 從 PDF 問題延伸學習想法（第 13 頁：dequeue 64,34,25 後）
-PDF 顯示陣列 front 在 3，rear 在 7。問題：dequeue 後陣列有洞。答案：左移元素（O(n)），或使用循環。延伸：程式碼模擬—dequeue 後新增 enqueue；線性失敗，循環成功。學習：討論時間複雜度—線性 enqueue O(1)，但移位使 dequeue 平均 O(n)。
+---
 
-## 第 4 部分：堆疊與佇列定義、ADT 與範例（第 14-20 頁）
-### PDF 原始內容總結
-- 第 14 頁：堆疊定義（LIFO，push/pop 從 top，盤子比喻）。
-- 第 15 頁：河內塔範例（圖片）。
-- 第 16 頁：ADT 堆疊（抽象函式：CreateS, IsFull, IsEmpty, Push, Pop）。
-- 第 17 頁：佇列定義（FIFO，enqueue rear, dequeue front，排隊比喻）。
-- 第 18 頁：結帳佇列範例（圖片）。
-- 第 19 頁：ADT 佇列（類似堆疊：CreateQ, IsFullQ, IsEmptyQ, AddQ, DeleteQ）。
-- 第 20 頁：思考：堆疊 vs. 佇列（圖片提示）。
+## 四、鏈結串列實作與綜合比較
 
-**<加深的內容>**：ADT 抽象實作—聚焦「什麼」（操作）而非「如何」（陣列/鏈結）。堆疊：LIFO 用於遞迴（例如，河內塔透過遞迴 push/pop 解決）。佇列：FIFO 用於公平（例如，結帳先到先服務）。
+### 1. 使用鏈結串列實作
+鏈結串列（Linked List）提供了另一種實作堆疊和佇列的方式，其核心優點是**動態大小**。
 
-**<額外加深加廣的內容>**：河內塔複雜度：2^n - 1 步，使用堆疊處理遞迴深度。擴展到雙端佇列（deque）用於兩端。現實應用：堆疊在 undo/redo（例如 Photoshop）；佇列在 BFS 演算法。
+*   **鏈結堆疊**：只需要一個指向串列**頭部（Head）** 的指標 `top`。
+    *   `Push`: 建立新節點，將其 `next` 指向當前的 `top`，然後將 `top` 更新為新節點。（在頭部插入）
+    *   `Pop`: 檢查 `top` 是否為空。若不為空，記錄 `top` 節點的值，將 `top` 更新為 `top->next`，然後刪除原節點。
 
-### 程式碼範例：C++ 中的 ADT 式堆疊（抽象介面）
-```cpp
-// 抽象堆疊 ADT（透過類別介面）
-class AbstractStack {
-public:
-    virtual bool isFull() = 0;
-    virtual bool isEmpty() = 0;
-    virtual void push(int item) = 0;
-    virtual int pop() = 0;
-};
+*   **鏈結佇列**：需要兩個指標，`front` 指向隊首節點，`rear` 指向隊尾節點。
+    *   `Enqueue`: 建立新節點，將當前 `rear->next` 指向新節點，然後更新 `rear` 為新節點。（在尾部插入）
+    *   `Dequeue`: 檢查 `front` 是否為空。若不為空，記錄 `front` 節點的值，將 `front` 更新為 `front->next`。如果更新後 `front` 為空，別忘了將 `rear` 也設為空。
 
-// 具體實作（陣列基礎，如上節）
-class ArrayStack : public AbstractStack { /* 如第 2 節實作 */ };
+### 2. 實作方式比較
 
-// 想法：ADT 允許交換實作（陣列 vs. 鏈結）而不變更客戶端程式碼。
-```
+| 特性 | **陣列實作** | **鏈結串列實作** |
+| :--- | :--- | :--- |
+| **大小** | 固定（靜態陣列）或需動態調整（向量） | 動態，隨需求增長 |
+| **記憶體使用** | 連續區塊，**快取命中率高**。可能浪費預分配空間。 | 分散節點，每個節點含資料和指標，有**額外開銷**。記憶體可能碎片化。 |
+| **基本操作時間** | Push/Pop, Enqueue/Dequeue 均為 **O(1)**。動態調整大小時有攤銷成本。 | Push/Pop, Enqueue/Dequeue 均為 **O(1)**（需注意佇列Enqueue需找到尾端，若無rear指標則為O(n)）。 |
+| **溢位** | 可能發生（需預先定義大小或處理調整）。 | 除非系統記憶體耗盡，否則不會溢位。 |
+| **實作複雜度** | 相對簡單，尤其循環佇列需注意邊界。 | 需處理指標操作和動態記憶體分配/釋放。 |
 
-### 從 PDF 提示延伸學習想法（第 20 頁：思考堆疊 vs. 佇列）
-PDF 提示思考。答案：堆疊反轉順序（LIFO），佇列保留（FIFO）。延伸：使用堆疊反轉佇列？全部 enqueue 到堆疊，pop 到新佇列。學習：程式碼實作—顯示互動（堆疊作為暫存緩衝）。
+**選擇建議**：
+*   當資料量上限已知或可預估，且追求極致效能時，可選擇**陣列（或向量）實作**。
+*   當資料量變化很大、難以預估上限，或頻繁在結構中間插入/刪除（此為堆疊/佇列外的需求）時，應選擇**鏈結串列實作**。
 
-## 第 5 部分：使用陣列與鏈結串列實作（第 21-26 頁）
-### PDF 原始內容總結
-- 第 21 頁：使用陣列實作堆疊/佇列。
-- 第 22 頁：堆疊陣列變數（stack[], top, MAX_SIZE）；操作：push(++top), pop(top--)。
-- 第 23 頁：佇列陣列（循環：%）；變數：front, rear，有時 count。
-- 第 24 頁：使用鏈結串列實作堆疊/佇列。
-- 第 25 頁：堆疊鏈結（top 指標；push 插入頭部，pop 移除頭部）。
-- 第 26 頁：佇列鏈結（front/rear 指標；enqueue 在 rear, dequeue 在 front）。
-
-**<加深的內容>**：陣列：固定大小，O(1) 操作，但溢位。鏈結：動態，O(1) 操作，但每個節點額外指標開銷（額外記憶體）。
-
-**<額外加深加廣的內容>**：鏈結串列避免調整大小但碎片化記憶體。擴展到 STL：std::stack（vector/deque 的適配器），std::queue（在 deque 上）。現實應用：核心中的鏈結佇列用於中斷處理（動態大小）。
-
-### 程式碼範例：C++ 中的鏈結串列基礎佇列
+#### 範例程式碼：鏈結佇列實作
 ```cpp
 #include <iostream>
 
@@ -212,55 +286,65 @@ private:
 public:
     LinkedQueue() : front(nullptr), rear(nullptr) {}
     
+    ~LinkedQueue() { // 解構子，釋放所有節點記憶體
+        while (!isEmpty()) {
+            dequeue();
+        }
+    }
+    
     bool isEmpty() { return front == nullptr; }
     
     void enqueue(int value) {
         Node* newNode = new Node(value);
-        if (rear) rear->next = newNode;
-        else front = newNode;  // 第一個節點
-        rear = newNode;
+        if (rear == nullptr) { // 佇列為空
+            front = rear = newNode;
+        } else {
+            rear->next = newNode;
+            rear = newNode;
+        }
+        std::cout << "已入隊: " << value << std::endl;
     }
     
     int dequeue() {
-        if (isEmpty()) return -1;
-        int val = front->data;
+        if (isEmpty()) {
+            std::cout << "佇列已空！" << std::endl;
+            return -1;
+        }
         Node* temp = front;
+        int value = temp->data;
         front = front->next;
-        if (!front) rear = nullptr;  // 現在空
-        delete temp;  // 釋放記憶體
-        return val;
+        
+        if (front == nullptr) { // 如果取出後佇列變空
+            rear = nullptr;
+        }
+        
+        delete temp; // 釋放記憶體
+        std::cout << "已出隊: " << value << std::endl;
+        return value;
     }
 };
-
-int main() {
-    LinkedQueue q;
-    q.enqueue(64); q.enqueue(34);
-    std::cout << "Dequeue: " << q.dequeue() << std::endl;  // 64
-    return 0;
-}
-// 想法：指標允許動態增長。使用 delete 處理記憶體洩漏。
 ```
 
-## 第 6 部分：比較
-### PDF 原始內容總結
-- 第 27-28 頁：表格比較堆疊/佇列特徵，陣列 vs. 鏈結實作（存取、記憶體、效能、溢位）。
+---
 
-**<加深的內容>**：堆疊：較簡單（一個指標/索引）。佇列：需兩個以 O(1)。陣列：連續，快取友好；鏈結：大小靈活。
+## 五、進階挑戰與應用
 
-**<額外加深加廣的內容>**：時間：全攤銷 O(1)。空間：陣列若未滿則浪費；鏈結 +sizeof(指標) 每元素。擴展：混合（鏈結陣列用於雜湊表）。現實應用：已知大小選陣列（固定緩衝）；未知選鏈結（任務佇列）。
+1.  **用兩個堆疊模擬一個佇列**
+    *   **思路**：維護兩個堆疊 `stackIn` 和 `stackOut`。
+    *   **Enqueue**：直接 `push` 到 `stackIn`。
+    *   **Dequeue**：
+        1.  如果 `stackOut` 為空，則將 `stackIn` 中的所有元素逐一 `pop` 出來並 `push` 到 `stackOut` 中。此步驟將元素順序顛倒了兩次，恢復為 FIFO 順序。
+        2.  從 `stackOut` 中 `pop` 出元素並返回。
+    *   **攤銷時間複雜度**：每個元素最多被壓入和彈出兩個堆疊各一次，因此攤銷後 `enqueue` 和 `dequeue` 均為 **O(1)**。
 
-## 挑戰性問題與現實應用
-1. **困難問題：使用堆疊的河內塔**  
-   使用堆疊模擬柱子實作河內塔遞迴。想法：三個堆疊 (A, B, C)。遞迴：從 A 移 n-1 到 B（經 C），A 頂到 C，B n-1 到 C（經 A）。以 2^n-1 步解決。使用堆疊 LIFO 暫存。C++：定義 Stack 類，遞迴函式 moveDisks(Stack& src, Stack& dest, Stack& aux, int n)。
+2.  **現實應用：印表機工作佇列**
+    *   基礎需求是 FIFO。但當有「緊急」文件時，簡單的佇列無法處理。
+    *   **解決方案**：使用**優先權佇列（Priority Queue）**，通常以**二元堆積（Binary Heap）** 實作。每個工作帶有優先級。`Dequeue` 時總是取出優先級最高的工作（若優先級相同，則依到達時間 FIFO）。
+    *   作業系統中的排程器常使用此類結構，並可能引入「老化（Aging）」機制，逐漸提高等待過久工作的優先級，防止「饑餓（Starvation）」。
 
-2. **現實問題：印表機佇列管理**  
-   問題：處理帶優先級的列印工作；正常 FIFO 佇列若緊急工作到來則失效。解決：使用優先佇列（佇列的 min-heap 變體）。Enqueue 帶優先級；dequeue 最高者。特徵：同優先 FIFO，但緊急覆蓋。在 OS 中，透過老化防止饑餓。
+3.  **經典問題：河內塔（Towers of Hanoi）**
+    *   這是遞迴的經典範例，其執行過程隱含了堆疊的 LIFO 行為。
+    *   可以用三個堆疊來具體模擬三根柱子上的圓盤。遞迴的每一步 `move(n, source, target, auxiliary)` 都對應著從一個堆疊 `pop` 並 `push` 到另一個堆疊的操作。
+    *   移動次數的數學解為 **2^n - 1**，顯示了問題的指數級複雜度。
 
-3. **困難問題：使用兩個堆疊模擬佇列**  
-   Enqueue 到 stack1；Dequeue：pop stack1 到 stack2（一次），pop stack2。想法：堆疊反轉，雙反轉 = FIFO。攤銷 O(1)。有用於僅有堆疊的環境（某些語言）。
-
-## 如何實作這些資料結構
-- **堆疊 (陣列)**：類別含 int arr[MAX], int top=-1；push: if(!full) arr[++top]=val；pop: if(!empty) return arr[top--]。優點：快速存取。缺點：固定大小—用 vector 動態。
-- **堆疊 (鏈結)**：Struct Node{int data; Node* next;}; 類別含 Node* top=nullptr；push: newNode->next=top; top=newNode；pop: temp=top; top=top->next; delete temp。
-- **佇列 (循環陣列)**：int arr[MAX], front=0, rear=0, count=0；enqueue: arr[rear]=val; rear=(rear+1)%MAX; count++；dequeue: val=arr[front]; front=(front+1)%MAX; count--。檢查滿: count==MAX；空: count==0。
-- **佇列 (鏈結)**：如上程式碼。優點：無溢位（直到堆積滿）。缺點：分配較慢。
+**總結**：堆疊與佇列是理解更複雜演算法（如遞迴、圖形遍歷 BFS/DFS）的基石。掌握其核心思想（LIFO/FIFO）、實作細節（尤其是邊界條件）以及適用場景，是學習資料結構的重要一步。
