@@ -1,0 +1,42 @@
+# LeetCode Daily 2025/12/05 筆記
+
+## 題目：Count Beautiful Splits in an Array (LeetCode 3578)
+
+### 題目描述
+- 給定整數陣列 nums 和整數 k
+- 計算有多少種分割方式，使得分割後的子陣列中最大值和最小值的差不超過 k
+
+---
+
+### 觀察
+- 使用滑動窗口維護符合條件的範圍
+- 使用 multiset 追蹤窗口內的最大最小值
+- 動態規劃計算方案數
+
+---
+
+### 程式碼 (C++)
+
+```cpp
+class Solution {
+public:
+    int countPartitions(vector<int>& nums, int k) {
+        const int MOD = 1e9 + 7;
+        int n = nums.size();
+        multiset<int> window;
+        vector<int> f(n + 1, 0), g(n + 1, 0);
+        f[0] = 1, g[0] = 1;
+        int l = 1;
+        for(int r = 1; r <= n; r++) {
+            window.insert(nums[r - 1]);
+            while(*window.rbegin() - *window.begin() > k){
+                window.erase(window.find(nums[l - 1]));
+                l++;
+            }
+            f[r] = (g[r - 1] - (l >= 2 ? g[l - 2] : 0) + MOD) % MOD;
+            g[r] = (g[r - 1] + f[r]) % MOD;
+        }
+        return f[n];
+    }
+};
+```
